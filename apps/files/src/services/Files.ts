@@ -2,28 +2,23 @@
  * SPDX-FileCopyrightText: 2023 Nextcloud GmbH and Nextcloud contributors
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-import type { ContentsWithRoot } from '@nextcloud/files'
+import type { ContentsWithRoot, File, Folder } from '@nextcloud/files'
 import type { FileStat, ResponseDataDetailed } from 'webdav'
 
-import { File, Folder, davGetDefaultPropfind, davResultToNode } from '@nextcloud/files'
+import { davGetDefaultPropfind, davResultToNode, davRootPath } from '@nextcloud/files'
 import { CancelablePromise } from 'cancelable-promise'
+import { join } from 'path'
 import { client } from './WebdavClient.ts'
-import logger from '../logger.js'
+import logger from '../logger'
 
 /**
  * Slim wrapper over `@nextcloud/files` `davResultToNode` to allow using the function with `Array.map`
  * @param stat The result returned by the webdav library
  */
-export const resultToNode = (node: FileStat): File | Folder => {
-	// TODO remove this hack with nextcloud-files v3.7
-	// just needed because of a bug in the webdav client
-	if (node.props?.displayname !== undefined) {
-		node.props.displayname = String(node.props.displayname)
-	}
-	return davResultToNode(node)
-}
+export const resultToNode = (stat: FileStat): File | Folder => davResultToNode(stat)
 
 export const getContents = (path = '/'): CancelablePromise<ContentsWithRoot> => {
+	path = join(davRootPath, path)
 	const controller = new AbortController()
 	const propfindPayload = davGetDefaultPropfind()
 
