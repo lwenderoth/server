@@ -4,4 +4,4 @@
  */
 import { davGetClient } from '@nextcloud/files'
 
-export const client = davGetClient()
+export const client = davGetClient(remoteURL)

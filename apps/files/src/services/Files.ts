@@ -5,14 +5,14 @@
 import type { ContentsWithRoot } from '@nextcloud/files'
 import type { FileStat, ResponseDataDetailed } from 'webdav'
 
+import { File, Folder, davGetDefaultPropfind, davResultToNode } from '@nextcloud/files'
 import { CancelablePromise } from 'cancelable-promise'
-import { File, Folder, davGetDefaultPropfind, davResultToNode, davRootPath } from '@nextcloud/files'
 import { client } from './WebdavClient.ts'
 import logger from '../logger.js'
 
 /**
  * Slim wrapper over `@nextcloud/files` `davResultToNode` to allow using the function with `Array.map`
- * @param node The node returned by the webdav library
+ * @param stat The result returned by the webdav library
  */
 export const resultToNode = (node: FileStat): File | Folder => {
 	// TODO remove this hack with nextcloud-files v3.7
@@ -27,10 +27,9 @@ export const getContents = (path = '/'): CancelablePromise<ContentsWithRoot> => 
 	const controller = new AbortController()
 	const propfindPayload = davGetDefaultPropfind()
 
-	path = `${davRootPath}${path}`
-
 	return new CancelablePromise(async (resolve, reject, onCancel) => {
 		onCancel(() => controller.abort())
+
 		try {
 			const contentsResponse = await client.getDirectoryContents(path, {
 				details: true,
