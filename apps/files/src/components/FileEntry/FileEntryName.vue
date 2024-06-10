@@ -52,7 +52,7 @@ import NcTextField from '@nextcloud/vue/dist/Components/NcTextField.js'
 import { useNavigation } from '../../composables/useNavigation'
 import { useRenamingStore } from '../../store/renaming.ts'
 import { getFilenameValidity } from '../../utils/filenameValidity.ts'
-import logger from '../../logger.js'
+import logger from '../../logger.ts'
 
 export default defineComponent({
 	name: 'FileEntryName',
