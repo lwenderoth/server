@@ -8,7 +8,7 @@ declare(strict_types=1);
 
 namespace Test\DB\QueryBuilder\Partitioned;
 
-use OC\DB\QueryBuilder\Partitioned\PartitionDefinition;
+use OC\DB\QueryBuilder\Partitioned\PartitionSplit;
 use OC\DB\QueryBuilder\Partitioned\PartitionedQueryBuilder;
 use OC\SystemConfig;
 use OCP\DB\QueryBuilder\IQueryBuilder;
@@ -38,7 +38,7 @@ class PartitionedQueryBuilderTest extends TestCase {
 
 
 	private function getQueryBuilder(): PartitionedQueryBuilder {
-		return new PartitionedQueryBuilder($this->connection, $this->systemConfig, $this->logger);
+		return new PartitionedQueryBuilder($this->connection, $this->systemConfig, $this->logger, []);
 	}
 
 	private function setupFileCache() {
@@ -92,7 +92,7 @@ class PartitionedQueryBuilderTest extends TestCase {
 	public function testSimpleOnlyPartitionQuery() {
 		$this->setupFileCache();
 		$builder = $this->getQueryBuilder();
-		$builder->addPartition(new PartitionDefinition('filecache', ['filecache']));
+		$builder->addPartition(new PartitionSplit('filecache', ['filecache']));
 
 		// query borrowed from UserMountCache
 		$query = $builder->select('path')
@@ -107,7 +107,7 @@ class PartitionedQueryBuilderTest extends TestCase {
 	public function testSimplePartitionedQuery() {
 		$this->setupFileCache();
 		$builder = $this->getQueryBuilder();
-		$builder->addPartition(new PartitionDefinition('filecache', ['filecache']));
+		$builder->addPartition(new PartitionSplit('filecache', ['filecache']));
 
 		// query borrowed from UserMountCache
 		$query = $builder->select('storage_id', 'root_id', 'user_id', 'mount_point', 'mount_id', 'f.path', 'mount_provider_class')
@@ -128,7 +128,7 @@ class PartitionedQueryBuilderTest extends TestCase {
 	public function testMultiTablePartitionedQuery() {
 		$this->setupFileCache();
 		$builder = $this->getQueryBuilder();
-		$builder->addPartition(new PartitionDefinition('filecache', ['filecache', 'filecache_extended']));
+		$builder->addPartition(new PartitionSplit('filecache', ['filecache', 'filecache_extended']));
 
 		$query = $builder->select('storage_id', 'root_id', 'user_id', 'mount_point', 'mount_id', 'f.path', 'mount_provider_class', 'fe.upload_time')
 			->from('mounts', 'm')

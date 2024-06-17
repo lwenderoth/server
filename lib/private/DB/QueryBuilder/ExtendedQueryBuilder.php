@@ -288,4 +288,9 @@ abstract class ExtendedQueryBuilder implements IQueryBuilder {
 	public function executeStatement(?IDBConnection $connection = null): int {
 		return $this->builder->executeStatement($connection);
 	}
+
+	public function runAcrossAllShards() {
+		$this->builder->runAcrossAllShards();
+		return $this;
+	}
 }

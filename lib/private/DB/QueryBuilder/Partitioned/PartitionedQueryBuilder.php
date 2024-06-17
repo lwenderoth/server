@@ -24,12 +24,13 @@ declare(strict_types=1);
 namespace OC\DB\QueryBuilder\Partitioned;
 
 use OC\DB\QueryBuilder\QueryBuilder;
+use OC\DB\QueryBuilder\Sharded\ShardedQueryBuilder;
 use OCP\DB\IResult;
 
-class PartitionedQueryBuilder extends QueryBuilder {
+class PartitionedQueryBuilder extends ShardedQueryBuilder {
 	/** @var array<string, PartitionQuery> $splitQueries */
 	private array $splitQueries = [];
-	/** @var list<PartitionDefinition> */
+	/** @var list<PartitionSplit> */
 	private array $partitions = [];
 
 	/** @var string[] */
@@ -95,11 +96,11 @@ class PartitionedQueryBuilder extends QueryBuilder {
 		$this->selectAliases = [];
 	}
 
-	public function addPartition(PartitionDefinition $partition): void {
+	public function addPartition(PartitionSplit $partition): void {
 		$this->partitions[] = $partition;
 	}
 
-	private function getPartition(string $table): ?PartitionDefinition {
+	private function getPartition(string $table): ?PartitionSplit {
 		foreach ($this->partitions as $partition) {
 			if ($partition->containsTable($table)) {
 				return $partition;
@@ -204,7 +205,7 @@ class PartitionedQueryBuilder extends QueryBuilder {
 	}
 
 
-	private function getPartitionForPredicate(string $predicate): ?PartitionDefinition {
+	private function getPartitionForPredicate(string $predicate): ?PartitionSplit {
 		foreach ($this->partitions as $partition) {
 			if ($partition->checkPredicateForTable($predicate)) {
 				return $partition;

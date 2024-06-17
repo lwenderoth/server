@@ -8,7 +8,7 @@ declare(strict_types=1);
 
 namespace OC\DB\QueryBuilder\Partitioned;
 
-class PartitionDefinition {
+class PartitionSplit {
 	/** @var array<string, string> */
 	public array $aliases = [];
 

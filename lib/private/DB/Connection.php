@@ -23,9 +23,10 @@ use Doctrine\DBAL\Platforms\SqlitePlatform;
 use Doctrine\DBAL\Result;
 use Doctrine\DBAL\Schema\Schema;
 use Doctrine\DBAL\Statement;
-use OC\DB\QueryBuilder\Partitioned\PartitionDefinition;
+use OC\DB\QueryBuilder\Partitioned\PartitionSplit;
 use OC\DB\QueryBuilder\Partitioned\PartitionedQueryBuilder;
 use OC\DB\QueryBuilder\QueryBuilder;
+use OC\DB\QueryBuilder\Sharded\ShardDefinition;
 use OC\SystemConfig;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\Diagnostics\IEventLogger;
@@ -79,6 +80,8 @@ class Connection extends PrimaryReadReplicaConnection {
 
 	/** @var array<string, list<string>> */
 	protected array $partitions;
+	/** @var ShardDefinition[] */
+	protected array $shards = [];
 
 	/**
 	 * Initializes a new instance of the Connection class.
@@ -122,7 +125,14 @@ class Connection extends PrimaryReadReplicaConnection {
 			$this->_config->setSQLLogger($debugStack);
 		}
 
-		$this->partitions = $this->systemConfig->getValue('db.partitions', []);
+		// todo: only allow specific, pre-defined shard configurations, the current config exists for easy testing setup
+		$shardConfig = $this->systemConfig->getValue('db.sharding', []);
+		$this->shards = array_map(function(array $config) {
+			return new ShardDefinition($config['table'], $config['primary_key'], $config['shard_key'], $config['companion_tables']);
+		}, $shardConfig);
+		$this->partitions = array_map(function(ShardDefinition $shard) {
+			return array_merge([$shard->table], $shard->companionTables);
+		}, $this->shards);
 
 		$this->setNestTransactionsWithSavepoints(true);
 	}
@@ -179,10 +189,11 @@ class Connection extends PrimaryReadReplicaConnection {
 			$builder = new PartitionedQueryBuilder(
 				new ConnectionAdapter($this),
 				$this->systemConfig,
-				$this->logger
+				$this->logger,
+				$this->shards,
 			);
 			foreach ($this->partitions as $name => $tables) {
-				$partition = new PartitionDefinition($name, $tables);
+				$partition = new PartitionSplit($name, $tables);
 				$builder->addPartition($partition);
 			}
 			return $builder;
