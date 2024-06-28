@@ -9,6 +9,7 @@ import { ShareType } from '@nextcloud/sharing'
 import eventBus from '@nextcloud/event-bus'
 import axios from '@nextcloud/axios'
 import '../main'
+import { ShareType } from '@nextcloud/sharing'
 
 const view = {
 	id: 'files',
