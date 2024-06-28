@@ -75,10 +75,13 @@ class DefaultPublicShareTemplateProvider implements IPublicShareTemplateProvider
 		} else if (($share->getPermissions() & \OCP\Constants::PERMISSION_CREATE) && !($share->getPermissions() & \OCP\Constants::PERMISSION_READ)) {
 			// share is a folder with create but no read permissions -> file drop only
 			$view = 'public-file-drop';
+			// Only needed for file drops
+			$this->initialState->provideInitialState('disclaimer', $this->config->getAppValue('core', 'shareapi_public_link_disclaimertext', ''));
 		}
 		// Set up initial state
 		$this->initialState->provideInitialState('isPublic', true);
 		$this->initialState->provideInitialState('sharingToken', $token);
+		$this->initialState->provideInitialState('filename', $shareNode->getName());
 		$this->initialState->provideInitialState('view', $view);
 
 		// Load scripts and styles for UI
