@@ -155,6 +155,20 @@ class Connection extends PrimaryReadReplicaConnection {
 	}
 
 	/**
+	 * @return IDBConnection[]
+	 */
+	public function getShardConnections(): array {
+		$connections = [];
+		foreach ($this->shards as $shardDefinition) {
+			foreach ($shardDefinition->getAllShards() as $shard) {
+				/** @var ConnectionAdapter $connection */
+				$connections[] = $this->shardConnectionManager->getConnection($shardDefinition, $shard);
+			}
+		}
+		return $connections;
+	}
+
+	/**
 	 * @throws Exception
 	 */
 	public function connect($connectionName = null) {
@@ -735,6 +749,9 @@ class Connection extends PrimaryReadReplicaConnection {
 			return $migrator->generateChangeScript($toSchema);
 		} else {
 			$migrator->migrate($toSchema);
+			foreach ($this->getShardConnections() as $shardConnection) {
+				$shardConnection->migrateToSchema($toSchema);
+			}
 		}
 	}
 

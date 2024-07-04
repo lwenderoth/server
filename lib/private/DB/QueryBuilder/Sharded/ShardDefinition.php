@@ -40,4 +40,8 @@ class ShardDefinition {
 	public function getShardForKey(string $key): int {
 		return $this->shardMapper->getShardForKey($key, count($this->shards));
 	}
+
+	public function getAllShards(): array {
+		return range(0, count($this->shards) - 1);
+	}
 }
