@@ -26,6 +26,7 @@ namespace OC\DB\QueryBuilder\Partitioned;
 use OC\DB\QueryBuilder\QueryBuilder;
 use OC\DB\QueryBuilder\Sharded\ShardedQueryBuilder;
 use OCP\DB\IResult;
+use OCP\IDBConnection;
 
 class PartitionedQueryBuilder extends ShardedQueryBuilder {
 	/** @var array<string, PartitionQuery> $splitQueries */
@@ -37,7 +38,6 @@ class PartitionedQueryBuilder extends ShardedQueryBuilder {
 	private array $selects = [];
 	/** @var array{'column' => string, 'alias' => string}[] */
 	private array $selectAliases = [];
-	private bool $isWrite = false;
 
 	// we need to save selects until we know all the table aliases
 	public function select(...$selects) {
@@ -215,37 +215,36 @@ class PartitionedQueryBuilder extends ShardedQueryBuilder {
 	}
 
 	public function update($update = null, $alias = null) {
-		$this->isWrite = true;
 		return parent::update($update, $alias);
 	}
 
 	public function insert($insert = null) {
-		$this->isWrite = true;
 		return parent::insert($insert);
 	}
 
 	public function delete($delete = null, $alias = null) {
-		$this->isWrite = true;
 		return parent::delete($delete, $alias);
 	}
 
-	public function execute() {
-		if ($this->isWrite) {
-			if (count($this->splitQueries)) {
-				throw new InvalidPartitionedQueryException("Partitioning write queries isn't supported");
-			}
-		} else {
-			$this->applySelects();
-			foreach ($this->splitQueries as $split) {
-				$split->query->setParameters($this->getParameters(), $this->getParameterTypes());
-			}
+	public function executeQuery(?IDBConnection $connection = null): IResult {
+		$this->applySelects();
+		foreach ($this->splitQueries as $split) {
+			$split->query->setParameters($this->getParameters(), $this->getParameterTypes());
 		}
-		$result = parent::execute();
-		if ($result instanceof IResult && count($this->splitQueries) > 0) {
+
+		$result = parent::executeQuery($connection);
+		if (count($this->splitQueries) > 0) {
 			return new PartitionedResult($this->splitQueries, $result);
 		} else {
 			return $result;
 		}
+	}
+
+	public function executeStatement(?IDBConnection $connection = null): int {
+		if (count($this->splitQueries)) {
+			throw new InvalidPartitionedQueryException("Partitioning write queries isn't supported");
+		}
+		return parent::executeStatement($connection);
 	}
 
 	public function getSQL() {

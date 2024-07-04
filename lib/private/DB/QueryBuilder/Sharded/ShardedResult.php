@@ -21,63 +21,60 @@ declare(strict_types=1);
  *
  */
 
-namespace OC\DB\QueryBuilder\Partitioned;
+namespace OC\DB\QueryBuilder\Sharded;
 
+use OC\DB\QueryBuilder\Partitioned\PartitionQuery;
 use OCP\DB\IResult;
 use PDO;
 
-class PartitionedResult implements IResult {
-	private ?array $rows = null;
-
-	/**
-	 * @param PartitionQuery[] $splitOfParts
-	 * @param IResult $result
-	 */
+class ShardedResult implements IResult {
 	public function __construct(
-		private array $splitOfParts,
-		private IResult $result
+		private array $rows,
 	) {
 	}
 
 	public function closeCursor(): bool {
-		return $this->result->closeCursor();
+		// noop
+		return true;
 	}
 
 	public function fetch(int $fetchMode = PDO::FETCH_ASSOC) {
-		if ($fetchMode !== PDO::FETCH_ASSOC) {
-			throw new InvalidPartitionedQueryException("Only FETCH_ASSOC is supported for partitioned queries");
+		$row = array_shift($this->rows);
+		if (!$row) {
+			return false;
 		}
-		$this->fetchRows();
-		return array_shift($this->rows) ?: false;
+		return match ($fetchMode) {
+			PDO::FETCH_ASSOC => $row,
+			PDO::FETCH_NUM => array_values($row),
+			default => throw new InvalidShardedQueryException("Fetch mode not supported for sharded queries"),
+		};
+
 	}
 
 	public function fetchAll(int $fetchMode = PDO::FETCH_ASSOC): array {
-		if ($fetchMode !== PDO::FETCH_ASSOC) {
-			throw new InvalidPartitionedQueryException("Only FETCH_ASSOC is supported for partitioned queries");
-		}
-		$this->fetchRows();
-		return $this->rows;
+		return match ($fetchMode) {
+			PDO::FETCH_ASSOC => $this->rows,
+			PDO::FETCH_NUM => array_map(function ($row) {
+				return array_values($row);
+			}, $this->rows),
+			default => throw new InvalidShardedQueryException("Fetch mode not supported for sharded queries"),
+		};
 	}
 
 	public function fetchColumn() {
-		throw new InvalidPartitionedQueryException("Only FETCH_ASSOC is supported for partitioned queries");
+		return $this->fetchOne();
 	}
 
 	public function fetchOne() {
-		throw new InvalidPartitionedQueryException("Only FETCH_ASSOC is supported for partitioned queries");
+		$row = $this->fetch();
+		if ($row) {
+			return current($row);
+		} else {
+			return false;
+		}
 	}
 
 	public function rowCount(): int {
-		$this->fetchRows();
 		return count($this->rows);
-	}
-
-	private function fetchRows(): void {
-		if ($this->rows === null) {
-			$this->rows = $this->result->fetchAll();
-			foreach ($this->splitOfParts as $part) {
-				$this->rows = $part->mergeWith($this->rows);
-			}
-		}
 	}
 }

@@ -9,5 +9,5 @@ declare(strict_types=1);
 namespace OCP\DB\QueryBuilder\Sharded;
 
 interface IShardMapper {
-	public function getShardForKey(string $table, string $key): int;
+	public function getShardForKey(string $key, int $count): int;
 }

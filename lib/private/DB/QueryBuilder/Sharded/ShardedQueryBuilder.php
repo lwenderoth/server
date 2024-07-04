@@ -13,6 +13,8 @@ use OC\DB\QueryBuilder\CompositeExpression;
 use OC\DB\QueryBuilder\Parameter;
 use OC\DB\QueryBuilder\QueryBuilder;
 use OC\SystemConfig;
+use OCP\DB\IResult;
+use OCP\IDBConnection;
 use Psr\Log\LoggerInterface;
 
 class ShardedQueryBuilder extends QueryBuilder {
@@ -21,6 +23,8 @@ class ShardedQueryBuilder extends QueryBuilder {
 	private ?ShardDefinition $shardDefinition = null;
 	/** @var bool Run the query across all shards */
 	private bool $allShards = false;
+	private bool $isInsert = false;
+	private mixed $lastInsertId = null;
 
 	/**
 	 * @param ConnectionAdapter $connection
@@ -29,10 +33,11 @@ class ShardedQueryBuilder extends QueryBuilder {
 	 * @param ShardDefinition[] $shardDefinitions
 	 */
 	public function __construct(
-		ConnectionAdapter $connection,
-		SystemConfig      $systemConfig,
-		LoggerInterface   $logger,
-		private array $shardDefinitions,
+		ConnectionAdapter              $connection,
+		SystemConfig                   $systemConfig,
+		LoggerInterface                $logger,
+		private array                  $shardDefinitions,
+		private ShardConnectionManager $shardConnectionManager,
 	) {
 		parent::__construct($connection, $systemConfig, $logger);
 	}
@@ -164,6 +169,7 @@ class ShardedQueryBuilder extends QueryBuilder {
 	}
 
 	public function insert($insert = null) {
+		$this->isInsert = true;
 		if ($insert) {
 			$this->actOnTable($insert);
 		}
@@ -203,9 +209,6 @@ class ShardedQueryBuilder extends QueryBuilder {
 	}
 
 	public function join($fromAlias, $join, $alias, $condition = null) {
-	/**
-	 * @throws InvalidShardedQueryException
-	 */
 		return $this->innerJoin($fromAlias, $join, $alias, $condition);
 	}
 
@@ -218,6 +221,14 @@ class ShardedQueryBuilder extends QueryBuilder {
 	 * @throws InvalidShardedQueryException
 	 */
 	public function validate(): void {
+		if ($this->shardDefinition && $this->isInsert) {
+			if ($this->allShards) {
+				throw new InvalidShardedQueryException("Can't insert across all shards");
+			}
+			if (empty($this->getShardKeys())) {
+				throw new InvalidShardedQueryException("Can't insert without shard key");
+			}
+		}
 		if ($this->shardDefinition && !$this->allShards) {
 			if (empty($this->getShardKeys()) && empty($this->getPrimaryKeys())) {
 				throw new InvalidShardedQueryException("No shard key or primary key set for query");
@@ -225,8 +236,68 @@ class ShardedQueryBuilder extends QueryBuilder {
 		}
 	}
 
-	public function execute() {
-		$this->validate();
-		return parent::execute();
+	/**
+	 * @return int[]
+	 */
+	private function getShards(): array {
+		if ($this->allShards) {
+			return range(0, count($this->shardDefinition->shards) - 1);
+		}
+		$shardKeys = $this->getShardKeys();
+		if (empty($shardKeys)) {
+			// todo: get shard keys from cache by primary keys
+			return range(0, count($this->shardDefinition->shards) - 1);
+		}
+		$shards = array_map(function (string $shardKey) {
+			return $this->shardDefinition->getShardForKey($shardKey);
+		}, $shardKeys);
+		return array_values(array_unique($shards));
 	}
+
+	public function executeQuery(?IDBConnection $connection = null): IResult {
+		$this->validate();
+		if ($this->shardDefinition) {
+			$shards = $this->getShards();
+			if (count($shards) === 1) {
+				return parent::executeQuery($this->shardConnectionManager->getConnection($this->shardDefinition, $shards[0]));
+			} else {
+				$results = [];
+				foreach ($shards as $shard) {
+					$shardConnection = $this->shardConnectionManager->getConnection($this->shardDefinition, $shard);
+					$subResult = parent::executeQuery($shardConnection);
+					$results = array_merge($results, $subResult->fetchAll());
+					$subResult->closeCursor();
+				}
+				return new ShardedResult($results);
+			}
+		}
+		return parent::executeQuery($connection);
+	}
+
+	public function executeStatement(?IDBConnection $connection = null): int {
+		$this->validate();
+		if ($this->shardDefinition) {
+			$shards = $this->getShards();
+			$count = 0;
+			foreach ($shards as $shard) {
+				$shardConnection = $this->shardConnectionManager->getConnection($this->shardDefinition, $shard);
+				$count += parent::executeStatement($shardConnection);
+
+				if ($this->isInsert) {
+					$table = $this->prefixTableName($this->lastInsertedTable);
+					$this->lastInsertId = $shardConnection->lastInsertId($table);
+				}
+			}
+			return $count;
+		}
+		return parent::executeStatement($connection);
+	}
+
+	public function getLastInsertId(): int {
+		if ($this->lastInsertId !== null) {
+			return $this->lastInsertId;
+		}
+		return parent::getLastInsertId();
+	}
+
 }
