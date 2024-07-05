@@ -169,7 +169,7 @@ class ShardedQueryBuilder extends QueryBuilder {
 
 	private function actOnTable(string $table): void {
 		foreach ($this->shardDefinitions as $shardDefinition) {
-			if ($shardDefinition->table === $table) {
+			if ($shardDefinition->hasTable($table)) {
 				$this->shardDefinition = $shardDefinition;
 			}
 		}
