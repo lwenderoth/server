@@ -284,6 +284,7 @@ class Cache implements ICache {
 				if (count($extensionValues)) {
 					$query = $this->getQueryBuilder();
 					$query->insert('filecache_extended');
+					$query->hintShardKey('storage', $storageId);
 
 					$query->setValue('fileid', $query->createNamedParameter($fileId, IQueryBuilder::PARAM_INT));
 					foreach ($extensionValues as $column => $value) {
@@ -357,6 +358,7 @@ class Cache implements ICache {
 			try {
 				$query = $this->getQueryBuilder();
 				$query->insert('filecache_extended');
+				$query->hintShardKey('storage', $this->getNumericStorageId());
 
 				$query->setValue('fileid', $query->createNamedParameter($id, IQueryBuilder::PARAM_INT));
 				foreach ($extensionValues as $column => $value) {

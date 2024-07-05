@@ -233,6 +233,16 @@ class ShardedQueryBuilder extends QueryBuilder {
 		return $this->innerJoin($fromAlias, $join, $alias, $condition);
 	}
 
+	public function hintShardKey(string $column, mixed $value) {
+		if ($column === $this->shardDefinition?->primaryKey) {
+			$this->primaryKeys[] = $value;
+		}
+		if ($column === $this->shardDefinition?->shardKey) {
+			$this->shardKeys[] = $value;
+		}
+		return $this;
+	}
+
 	public function runAcrossAllShards() {
 		$this->allShards = true;
 		return $this;
