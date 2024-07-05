@@ -18,8 +18,8 @@ use OCP\IDBConnection;
 use Psr\Log\LoggerInterface;
 
 class ShardedQueryBuilder extends QueryBuilder {
-	private mixed $shardKey = null;
-	private mixed $primaryKey = null;
+	private array $shardKeys = [];
+	private array $primaryKeys = [];
 	private ?ShardDefinition $shardDefinition = null;
 	/** @var bool Run the query across all shards */
 	private bool $allShards = false;
@@ -43,11 +43,19 @@ class ShardedQueryBuilder extends QueryBuilder {
 	}
 
 	public function getShardKeys(): array {
-		return $this->getKeyValue($this->shardKey);
+		return $this->getKeyValues($this->shardKeys);
 	}
 
 	public function getPrimaryKeys(): array {
-		return $this->getKeyValue($this->primaryKey);
+		return $this->getKeyValues($this->primaryKeys);
+	}
+
+	private function getKeyValues(array $keys): array {
+		$values = [];
+		foreach ($keys as $key) {
+			$values = array_merge($values, $this->getKeyValue($key));
+		}
+		return array_values(array_unique($values));
 	}
 
 	private function getKeyValue($value): array {
@@ -88,52 +96,65 @@ class ShardedQueryBuilder extends QueryBuilder {
 		if (!$this->shardDefinition) {
 			return;
 		}
-		if ($key = $this->tryExtractShardKey($predicate, $this->shardDefinition->shardKey)) {
-			$this->shardKey = $key;
+		if ($keys = $this->tryExtractShardKeys($predicate, $this->shardDefinition->shardKey)) {
+			$this->shardKeys += $keys;
 		}
-		if ($key = $this->tryExtractShardKey($predicate, $this->shardDefinition->primaryKey)) {
-			$this->primaryKey = $key;
+		if ($keys = $this->tryExtractShardKeys($predicate, $this->shardDefinition->primaryKey)) {
+			$this->primaryKeys += $keys;
 		}
 	}
 
-	private function tryExtractShardKey($predicate, string $column): ?string {
+	/**
+	 * @param $predicate
+	 * @param string $column
+	 * @return string[]
+	 */
+	private function tryExtractShardKeys($predicate, string $column): array {
 		if ($predicate instanceof CompositeExpression) {
-			// todo extract from composite expressions
-			return null;
+			$values = [];
+			foreach ($predicate->getParts() as $part) {
+				$partValues = $this->tryExtractShardKeys($part, $column);
+				// for OR expressions, we can only rely on the predicate if all parts contain the comparison
+				if ($predicate->getType() === CompositeExpression::TYPE_OR && !$partValues) {
+					return [];
+				}
+				$values = array_merge($values, $partValues);
+			}
+			return $values;
 		}
 		$predicate = (string)$predicate;
 		// expect a condition in the form of 'alias1.column1 = placeholder' or 'alias1.column1 in placeholder'
 		if (substr_count($predicate, ' ') > 2) {
-			return null;
+			return [];
 		}
 		if (str_contains($predicate, ' = ')) {
 			$parts = explode(' = ', $predicate);
 			if ($parts[0] === "`{$column}`" || str_ends_with($parts[0], "`.`{$column}`")) {
-				return $parts[1];
+				return [$parts[1]];
 			} else {
-				return null;
+				return [];
 			}
 		}
 
 		if (str_contains($predicate, ' IN ')) {
 			$parts = explode(' IN ', $predicate);
 			if ($parts[0] === "`{$column}`" || str_ends_with($parts[0], "`.`{$column}`")) {
-				return trim(trim($parts[1], '('), ')');
+				return [trim(trim($parts[1], '('), ')')];
 			} else {
-				return null;
+				return [];
 			}
 		}
 
-		return null;
+		return [];
 	}
 
 	public function setValue($column, $value) {
 		if ($this->shardDefinition) {
 			if ($column === $this->shardDefinition->primaryKey) {
-				$this->primaryKey = $value;
+				$this->primaryKeys[] = $value;
 			}
 			if ($column === $this->shardDefinition->shardKey) {
-				$this->shardKey = $value;
+				$this->shardKeys[] = $value;
 			}
 		}
 		return parent::setValue($column, $value);

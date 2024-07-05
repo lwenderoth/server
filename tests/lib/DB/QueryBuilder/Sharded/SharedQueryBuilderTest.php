@@ -9,6 +9,8 @@ declare(strict_types=1);
 namespace Test\DB\QueryBuilder\Sharded;
 
 use OC\DB\QueryBuilder\Sharded\InvalidShardedQueryException;
+use OC\DB\QueryBuilder\Sharded\RoundRobinShardMapper;
+use OC\DB\QueryBuilder\Sharded\ShardConnectionManager;
 use OC\DB\QueryBuilder\Sharded\ShardDefinition;
 use OC\DB\QueryBuilder\Sharded\ShardedQueryBuilder;
 use OC\SystemConfig;
@@ -33,8 +35,9 @@ class SharedQueryBuilderTest extends TestCase {
 		return new ShardedQueryBuilder(
 			$this->connection->getQueryBuilder(),
 			[
-				new ShardDefinition($table, $primaryColumn, $shardColumn, $companionTables),
+				new ShardDefinition($table, $primaryColumn, [], $shardColumn, new RoundRobinShardMapper(), $companionTables, []),
 			],
+			$this->createMock(ShardConnectionManager::class),
 		);
 	}
 
@@ -97,5 +100,24 @@ class SharedQueryBuilderTest extends TestCase {
 
 		$query->validate();
 		$this->assertTrue(true);
+	}
+
+	public function testGetShardKeyMultipleSingleParam() {
+		$query = $this->getQueryBuilder('filecache', 'storage', 'fileid');
+		$query->select('fileid', 'path')
+			->from('filecache')
+			->where($query->expr()->andX(
+				$query->expr()->gt('mtime', $query->createNamedParameter(0), IQueryBuilder::PARAM_INT),
+				$query->expr()->orX(
+					$query->expr()->eq('storage', $query->createNamedParameter(10, IQueryBuilder::PARAM_INT)),
+					$query->expr()->andX(
+						$query->expr()->eq('storage', $query->createNamedParameter(11, IQueryBuilder::PARAM_INT)),
+						$query->expr()->like('path', $query->createNamedParameter("foo/%"))
+					)
+				)
+			));
+
+		$this->assertEquals([], $query->getPrimaryKeys());
+		$this->assertEquals([10, 11], $query->getShardKeys());
 	}
 }
