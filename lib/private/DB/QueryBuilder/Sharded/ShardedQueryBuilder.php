@@ -23,8 +23,9 @@ class ShardedQueryBuilder extends QueryBuilder {
 	private ?ShardDefinition $shardDefinition = null;
 	/** @var bool Run the query across all shards */
 	private bool $allShards = false;
-	private bool $isInsert = false;
+	private ?string $insertTable = null;
 	private mixed $lastInsertId = null;
+	private ?IDBConnection $lastInsertConnection = null;
 
 	/**
 	 * @param ConnectionAdapter $connection
@@ -190,8 +191,8 @@ class ShardedQueryBuilder extends QueryBuilder {
 	}
 
 	public function insert($insert = null) {
-		$this->isInsert = true;
-		if ($insert) {
+		if (is_string($insert) && $insert) {
+			$this->insertTable = $insert;
 			$this->actOnTable($insert);
 		}
 		return parent::insert($insert);
@@ -252,7 +253,7 @@ class ShardedQueryBuilder extends QueryBuilder {
 	 * @throws InvalidShardedQueryException
 	 */
 	public function validate(): void {
-		if ($this->shardDefinition && $this->isInsert) {
+		if ($this->shardDefinition && $this->insertTable) {
 			if ($this->allShards) {
 				throw new InvalidShardedQueryException("Can't insert across all shards");
 			}
@@ -312,11 +313,16 @@ class ShardedQueryBuilder extends QueryBuilder {
 			$count = 0;
 			foreach ($shards as $shard) {
 				$shardConnection = $this->shardConnectionManager->getConnection($this->shardDefinition, $shard);
+				if (!$this->primaryKeys && $this->shardDefinition->table === $this->insertTable) {
+					// todo: is random primary key fine, or do we need to do shared-autoincrement
+					$id = random_int(0, PHP_INT_MAX);
+					$this->setValue($this->shardDefinition->primaryKey, $this->createNamedParameter($id, self::PARAM_INT));
+					$this->lastInsertId = $id;
+				}
 				$count += parent::executeStatement($shardConnection);
 
-				if ($this->isInsert) {
-					$table = $this->prefixTableName($this->lastInsertedTable);
-					$this->lastInsertId = $shardConnection->lastInsertId($table);
+				if ($this->insertTable) {
+					$this->lastInsertConnection = $shardConnection;
 				}
 			}
 			return $count;
@@ -325,10 +331,16 @@ class ShardedQueryBuilder extends QueryBuilder {
 	}
 
 	public function getLastInsertId(): int {
-		if ($this->lastInsertId !== null) {
+		if ($this->lastInsertId) {
 			return $this->lastInsertId;
 		}
-		return parent::getLastInsertId();
+		if ($this->lastInsertConnection) {
+			$table = $this->builder->prefixTableName($this->insertTable);
+			return $this->lastInsertConnection->lastInsertId($table);
+		} else {
+			return parent::getLastInsertId();
+		}
 	}
+
 
 }
