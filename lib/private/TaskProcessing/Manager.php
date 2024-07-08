@@ -3,24 +3,8 @@
 declare(strict_types=1);
 
 /**
- * @copyright Copyright (c) 2024 Marcel Klehr <mklehr@gmx.net>
- *
- * @author Marcel Klehr <mklehr@gmx.net>
- *
- * @license GNU AGPL version 3 or any later version
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as
- * published by the Free Software Foundation, either version 3 of the
- * License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ * SPDX-FileCopyrightText: 2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
 namespace OC\TaskProcessing;
@@ -31,6 +15,7 @@ use OC\TaskProcessing\Db\TaskMapper;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Db\MultipleObjectsReturnedException;
 use OCP\BackgroundJob\IJobList;
+use OCP\DB\Exception;
 use OCP\EventDispatcher\IEventDispatcher;
 use OCP\Files\AppData\IAppDataFactory;
 use OCP\Files\File;
@@ -409,8 +394,13 @@ class Manager implements IManager {
 			\OCP\TaskProcessing\TaskTypes\TextToTextTopics::ID => \OCP\Server::get(\OCP\TaskProcessing\TaskTypes\TextToTextTopics::class),
 			\OCP\TaskProcessing\TaskTypes\TextToTextHeadline::ID => \OCP\Server::get(\OCP\TaskProcessing\TaskTypes\TextToTextHeadline::class),
 			\OCP\TaskProcessing\TaskTypes\TextToTextSummary::ID => \OCP\Server::get(\OCP\TaskProcessing\TaskTypes\TextToTextSummary::class),
+			\OCP\TaskProcessing\TaskTypes\TextToTextFormalization::ID => \OCP\Server::get(\OCP\TaskProcessing\TaskTypes\TextToTextFormalization::class),
+			\OCP\TaskProcessing\TaskTypes\TextToTextSimplification::ID => \OCP\Server::get(\OCP\TaskProcessing\TaskTypes\TextToTextSimplification::class),
+			\OCP\TaskProcessing\TaskTypes\TextToTextChat::ID => \OCP\Server::get(\OCP\TaskProcessing\TaskTypes\TextToTextChat::class),
 			\OCP\TaskProcessing\TaskTypes\TextToImage::ID => \OCP\Server::get(\OCP\TaskProcessing\TaskTypes\TextToImage::class),
 			\OCP\TaskProcessing\TaskTypes\AudioToText::ID => \OCP\Server::get(\OCP\TaskProcessing\TaskTypes\AudioToText::class),
+			\OCP\TaskProcessing\TaskTypes\ContextWrite::ID => \OCP\Server::get(\OCP\TaskProcessing\TaskTypes\ContextWrite::class),
+			\OCP\TaskProcessing\TaskTypes\GenerateEmoji::ID => \OCP\Server::get(\OCP\TaskProcessing\TaskTypes\GenerateEmoji::class),
 		];
 
 		foreach ($context->getTaskProcessingTaskTypes() as $providerServiceRegistration) {
@@ -432,21 +422,6 @@ class Manager implements IManager {
 		$taskTypes += $this->_getTextProcessingTaskTypes();
 
 		return $taskTypes;
-	}
-
-	/**
-	 * @param string $taskType
-	 * @return IProvider
-	 * @throws \OCP\TaskProcessing\Exception\Exception
-	 */
-	private function _getPreferredProvider(string $taskType) {
-		$providers = $this->getProviders();
-		foreach ($providers as $provider) {
-			if ($provider->getTaskTypeId() === $taskType) {
-				return $provider;
-			}
-		}
-		throw new \OCP\TaskProcessing\Exception\Exception('No matching provider found');
 	}
 
 	/**
@@ -503,7 +478,8 @@ class Manager implements IManager {
 	 * @psalm-template T
 	 */
 	private function removeSuperfluousArrayKeys(array $array, ...$specs): array {
-		$keys = array_unique(array_reduce($specs, fn ($carry, $spec) => $carry + array_keys($spec), []));
+		$keys = array_unique(array_reduce($specs, fn ($carry, $spec) => array_merge($carry, array_keys($spec)), []));
+		$keys = array_filter($keys, fn ($key) => array_key_exists($key, $array));
 		$values = array_map(fn (string $key) => $array[$key], $keys);
 		return array_combine($keys, $values);
 	}
@@ -518,6 +494,16 @@ class Manager implements IManager {
 		}
 
 		return $this->providers;
+	}
+
+	public function getPreferredProvider(string $taskType) {
+		$providers = $this->getProviders();
+		foreach ($providers as $provider) {
+			if ($provider->getTaskTypeId() === $taskType) {
+				return $provider;
+			}
+		}
+		throw new \OCP\TaskProcessing\Exception\Exception('No matching provider found');
 	}
 
 	public function getAvailableTaskTypes(): array {
@@ -592,7 +578,7 @@ class Manager implements IManager {
 		// remove superfluous keys and set input
 		$task->setInput($this->removeSuperfluousArrayKeys($task->getInput(), $inputShape, $optionalInputShape));
 		$task->setStatus(Task::STATUS_SCHEDULED);
-		$provider = $this->_getPreferredProvider($task->getTaskTypeId());
+		$provider = $this->getPreferredProvider($task->getTaskTypeId());
 		// calculate expected completion time
 		$completionExpectedAt = new \DateTime('now');
 		$completionExpectedAt->add(new \DateInterval('PT'.$provider->getExpectedRuntime().'S'));
@@ -711,9 +697,9 @@ class Manager implements IManager {
 		$this->dispatcher->dispatchTyped($event);
 	}
 
-	public function getNextScheduledTask(?string $taskTypeId = null): Task {
+	public function getNextScheduledTask(array $taskTypeIds = [], array $taskIdsToIgnore = []): Task {
 		try {
-			$taskEntity = $this->taskMapper->findOldestScheduledByType($taskTypeId);
+			$taskEntity = $this->taskMapper->findOldestScheduledByType($taskTypeIds, $taskIdsToIgnore);
 			return $taskEntity->toPublicTask();
 		} catch (DoesNotExistException $e) {
 			throw new \OCP\TaskProcessing\Exception\NotFoundException('Could not find the task', 0, $e);
@@ -878,5 +864,24 @@ class Manager implements IManager {
 		$input = $this->removeSuperfluousArrayKeys($input, $inputShape, $optionalInputShape);
 		$input = $this->fillInputFileData($task->getUserId(), $input, $inputShape, $optionalInputShape);
 		return $input;
+	}
+
+	public function lockTask(Task $task): bool {
+		$taskEntity = \OC\TaskProcessing\Db\Task::fromPublicTask($task);
+		if ($this->taskMapper->lockTask($taskEntity) === 0) {
+			return false;
+		}
+		$task->setStatus(Task::STATUS_RUNNING);
+		return true;
+	}
+
+	/**
+	 * @throws \JsonException
+	 * @throws Exception
+	 */
+	public function setTaskStatus(Task $task, int $status): void {
+		$task->setStatus($status);
+		$taskEntity = \OC\TaskProcessing\Db\Task::fromPublicTask($task);
+		$this->taskMapper->update($taskEntity);
 	}
 }

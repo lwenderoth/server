@@ -1,3 +1,7 @@
+<!--
+ - SPDX-FileCopyrightText: 2022 Nextcloud GmbH and Nextcloud contributors
+ - SPDX-License-Identifier: AGPL-3.0-or-later
+ -->
 <template>
 	<div id="app-dashboard">
 		<h2>{{ greeting.text }}</h2>
@@ -502,7 +506,7 @@ export default {
 	background-color: var(--color-main-background-blur);
 	-webkit-backdrop-filter: var(--filter-background-blur);
 	backdrop-filter: var(--filter-background-blur);
-	border-radius: var(--border-radius-rounded);
+	border-radius: var(--body-container-radius);
 
 	#body-user.theme--highcontrast & {
 		border: 2px solid var(--color-border);

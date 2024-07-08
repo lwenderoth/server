@@ -1,33 +1,10 @@
 <?php
 
 declare(strict_types=1);
-
 /**
- * @copyright Copyright (c) 2016, ownCloud, Inc.
- *
- * @author Christoph Wurst <christoph@winzerhof-wurst.at>
- * @author Joas Schilling <coding@schilljs.com>
- * @author Lukas Reschke <lukas@statuscode.ch>
- * @author Morris Jobke <hey@morrisjobke.de>
- * @author Roeland Jago Douma <roeland@famdouma.nl>
- * @author Victor Dubiniuk <dubiniuk@owncloud.com>
- * @author Vincent Petry <vincent@nextcloud.com>
- * @author Xheni Myrtaj <myrtajxheni@gmail.com>
- *
- * @license AGPL-3.0
- *
- * This code is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License, version 3,
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License, version 3,
- * along with this program. If not, see <http://www.gnu.org/licenses/>
- *
+ * SPDX-FileCopyrightText: 2016-2024 Nextcloud GmbH and Nextcloud contributors
+ * SPDX-FileCopyrightText: 2016 ownCloud, Inc.
+ * SPDX-License-Identifier: AGPL-3.0-only
  */
 namespace OC\IntegrityCheck;
 
@@ -396,7 +373,7 @@ class Checker {
 	 */
 	public function hasPassedCheck(): bool {
 		$results = $this->getResults();
-		if (empty($results)) {
+		if ($results !== null && empty($results)) {
 			return true;
 		}
 
@@ -404,15 +381,20 @@ class Checker {
 	}
 
 	/**
-	 * @return array
+	 * @return array|null Either the results or null if no results available
 	 */
-	public function getResults(): array {
+	public function getResults(): array|null {
 		$cachedResults = $this->cache->get(self::CACHE_KEY);
 		if (!\is_null($cachedResults) and $cachedResults !== false) {
 			return json_decode($cachedResults, true);
 		}
 
-		return $this->appConfig?->getValueArray('core', self::CACHE_KEY, lazy: true) ?? [];
+		if ($this->appConfig?->hasKey('core', self::CACHE_KEY, lazy: true)) {
+			return $this->appConfig->getValueArray('core', self::CACHE_KEY, lazy: true);
+		}
+
+		// No results available
+		return null;
 	}
 
 	/**
@@ -422,7 +404,7 @@ class Checker {
 	 * @param array $result
 	 */
 	private function storeResults(string $scope, array $result) {
-		$resultArray = $this->getResults();
+		$resultArray = $this->getResults() ?? [];
 		unset($resultArray[$scope]);
 		if (!empty($result)) {
 			$resultArray[$scope] = $result;
