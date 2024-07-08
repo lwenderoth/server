@@ -12,6 +12,7 @@ use OC\DB\ConnectionAdapter;
 use OC\DB\QueryBuilder\CompositeExpression;
 use OC\DB\QueryBuilder\Parameter;
 use OC\DB\QueryBuilder\QueryBuilder;
+use OC\DB\ArrayResult;
 use OC\SystemConfig;
 use OCP\DB\IResult;
 use OCP\IDBConnection;
@@ -300,7 +301,7 @@ class ShardedQueryBuilder extends QueryBuilder {
 					$results = array_merge($results, $subResult->fetchAll());
 					$subResult->closeCursor();
 				}
-				return new ShardedResult($results);
+				return new ArrayResult($results);
 			}
 		}
 		return parent::executeQuery($connection);

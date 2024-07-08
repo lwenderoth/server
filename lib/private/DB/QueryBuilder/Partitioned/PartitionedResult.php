@@ -23,11 +23,15 @@ declare(strict_types=1);
 
 namespace OC\DB\QueryBuilder\Partitioned;
 
+use OC\DB\ArrayResult;
 use OCP\DB\IResult;
 use PDO;
 
-class PartitionedResult implements IResult {
-	private ?array $rows = null;
+/**
+ * Combine the results of multiple join parts into a single result
+ */
+class PartitionedResult extends ArrayResult {
+	private bool $fetched = false;
 
 	/**
 	 * @param PartitionQuery[] $splitOfParts
@@ -37,6 +41,7 @@ class PartitionedResult implements IResult {
 		private array $splitOfParts,
 		private IResult $result
 	) {
+		parent::__construct([]);
 	}
 
 	public function closeCursor(): bool {
@@ -44,36 +49,23 @@ class PartitionedResult implements IResult {
 	}
 
 	public function fetch(int $fetchMode = PDO::FETCH_ASSOC) {
-		if ($fetchMode !== PDO::FETCH_ASSOC) {
-			throw new InvalidPartitionedQueryException("Only FETCH_ASSOC is supported for partitioned queries");
-		}
 		$this->fetchRows();
-		return array_shift($this->rows) ?: false;
+		return parent::fetch($fetchMode);
 	}
 
 	public function fetchAll(int $fetchMode = PDO::FETCH_ASSOC): array {
-		if ($fetchMode !== PDO::FETCH_ASSOC) {
-			throw new InvalidPartitionedQueryException("Only FETCH_ASSOC is supported for partitioned queries");
-		}
 		$this->fetchRows();
-		return $this->rows;
-	}
-
-	public function fetchColumn() {
-		throw new InvalidPartitionedQueryException("Only FETCH_ASSOC is supported for partitioned queries");
-	}
-
-	public function fetchOne() {
-		throw new InvalidPartitionedQueryException("Only FETCH_ASSOC is supported for partitioned queries");
+		return parent::fetchAll($fetchMode);
 	}
 
 	public function rowCount(): int {
 		$this->fetchRows();
-		return count($this->rows);
+		return parent::rowCount();
 	}
 
 	private function fetchRows(): void {
-		if ($this->rows === null) {
+		if (!$this->fetched) {
+			$this->fetched = true;
 			$this->rows = $this->result->fetchAll();
 			foreach ($this->splitOfParts as $part) {
 				$this->rows = $part->mergeWith($this->rows);

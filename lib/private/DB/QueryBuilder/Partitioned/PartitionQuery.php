@@ -38,11 +38,6 @@ class PartitionQuery {
 		$this->query->select($joinFromColumn);
 	}
 
-	/**
-	 * @param array $rows
-	 * @return array
-	 * @throws \OCP\DB\Exception
-	 */
 	public function mergeWith(array $rows): array {
 		if (empty($rows)) {
 			return [];

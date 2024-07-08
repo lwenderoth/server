@@ -21,15 +21,17 @@ declare(strict_types=1);
  *
  */
 
-namespace OC\DB\QueryBuilder\Sharded;
+namespace OC\DB;
 
-use OC\DB\QueryBuilder\Partitioned\PartitionQuery;
 use OCP\DB\IResult;
 use PDO;
 
-class ShardedResult implements IResult {
+/**
+ * Wrap an array or rows into a result interface
+ */
+class ArrayResult implements IResult {
 	public function __construct(
-		private array $rows,
+		protected array $rows,
 	) {
 	}
 
@@ -46,7 +48,8 @@ class ShardedResult implements IResult {
 		return match ($fetchMode) {
 			PDO::FETCH_ASSOC => $row,
 			PDO::FETCH_NUM => array_values($row),
-			default => throw new InvalidShardedQueryException("Fetch mode not supported for sharded queries"),
+			PDO::FETCH_COLUMN => current($row),
+			default => throw new \InvalidArgumentException("Fetch mode not supported for array result"),
 		};
 
 	}
@@ -57,7 +60,10 @@ class ShardedResult implements IResult {
 			PDO::FETCH_NUM => array_map(function ($row) {
 				return array_values($row);
 			}, $this->rows),
-			default => throw new InvalidShardedQueryException("Fetch mode not supported for sharded queries"),
+			PDO::FETCH_COLUMN => array_map(function ($row) {
+				return current($row);
+			}, $this->rows),
+			default => throw new \InvalidArgumentException("Fetch mode not supported for array result"),
 		};
 	}
 
