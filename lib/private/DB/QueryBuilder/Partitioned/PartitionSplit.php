@@ -27,6 +27,12 @@ class PartitionSplit {
 		}
 	}
 
+	public function addTable(string $table): void {
+		if (!$this->containsTable($table)) {
+			$this->tables[] = $table;
+		}
+	}
+
 	public function containsTable(string $table): bool {
 		return in_array($table, $this->tables);
 	}

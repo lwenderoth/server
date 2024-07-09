@@ -10,6 +10,7 @@ namespace Test\DB\QueryBuilder\Partitioned;
 
 use OC\DB\QueryBuilder\Partitioned\PartitionSplit;
 use OC\DB\QueryBuilder\Partitioned\PartitionedQueryBuilder;
+use OC\DB\QueryBuilder\Sharded\ShardConnectionManager;
 use OC\SystemConfig;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
@@ -24,11 +25,13 @@ class PartitionedQueryBuilderTest extends TestCase {
 	private IDBConnection $connection;
 	private SystemConfig $systemConfig;
 	private LoggerInterface $logger;
+	private ShardConnectionManager $shardConnectionManager;
 
 	protected function setUp(): void {
 		$this->connection = Server::get(IDBConnection::class);
 		$this->systemConfig = Server::get(SystemConfig::class);
 		$this->logger = Server::get(LoggerInterface::class);
+		$this->shardConnectionManager = Server::get(ShardConnectionManager::class);
 	}
 
 	protected function tearDown(): void {
@@ -38,10 +41,18 @@ class PartitionedQueryBuilderTest extends TestCase {
 
 
 	private function getQueryBuilder(): PartitionedQueryBuilder {
-		return new PartitionedQueryBuilder($this->connection, $this->systemConfig, $this->logger, []);
+		return new PartitionedQueryBuilder($this->connection, $this->systemConfig, $this->logger, [], $this->shardConnectionManager);
 	}
 
 	private function setupFileCache() {
+		$query = $this->connection->getQueryBuilder();
+		$query->insert('storages')
+			->values([
+				'numeric_id' => $query->createNamedParameter(1001001, IQueryBuilder::PARAM_INT),
+				'id' => $query->createNamedParameter('test1'),
+			]);
+		$query->executeStatement();
+
 		$query = $this->connection->getQueryBuilder();
 		$query->insert('filecache')
 			->values([
@@ -75,6 +86,11 @@ class PartitionedQueryBuilderTest extends TestCase {
 
 	private function cleanupDb() {
 		$query = $this->connection->getQueryBuilder();
+		$query->delete('storages')
+			->where($query->expr()->gt('numeric_id', $query->createNamedParameter(1000000, IQueryBuilder::PARAM_INT)));
+		$query->executeStatement();
+
+		$query = $this->connection->getQueryBuilder();
 		$query->delete('filecache')
 			->where($query->expr()->gt('storage', $query->createNamedParameter(1000000, IQueryBuilder::PARAM_INT)));
 		$query->executeStatement();
@@ -97,7 +113,7 @@ class PartitionedQueryBuilderTest extends TestCase {
 		// query borrowed from UserMountCache
 		$query = $builder->select('path')
 			->from('filecache')
-			->where($builder->expr()->eq('storage', $builder->createPositionalParameter(1001001, IQueryBuilder::PARAM_INT)));
+			->where($builder->expr()->eq('storage', $builder->createNamedParameter(1001001, IQueryBuilder::PARAM_INT)));
 
 		$results = $query->executeQuery()->fetchAll();
 		$this->assertCount(1, $results);
@@ -113,9 +129,11 @@ class PartitionedQueryBuilderTest extends TestCase {
 		$query = $builder->select('storage_id', 'root_id', 'user_id', 'mount_point', 'mount_id', 'f.path', 'mount_provider_class')
 			->from('mounts', 'm')
 			->innerJoin('m', 'filecache', 'f', $builder->expr()->eq('m.root_id', 'f.fileid'))
-			->where($builder->expr()->eq('storage_id', $builder->createPositionalParameter(1001001, IQueryBuilder::PARAM_INT)));
+			->where($builder->expr()->eq('storage_id', $builder->createNamedParameter(1001001, IQueryBuilder::PARAM_INT)));
 
-		$query->andWhere($builder->expr()->eq('user_id', $builder->createPositionalParameter('partitioned_test')));
+		$query->andWhere($builder->expr()->eq('user_id', $builder->createNamedParameter('partitioned_test')));
+
+		$this->assertEquals(2, $query->getPartitionCount());
 
 		$results = $query->executeQuery()->fetchAll();
 		$this->assertCount(1, $results);
@@ -134,9 +152,11 @@ class PartitionedQueryBuilderTest extends TestCase {
 			->from('mounts', 'm')
 			->innerJoin('m', 'filecache', 'f', $builder->expr()->eq('m.root_id', 'f.fileid'))
 			->innerJoin('f', 'filecache_extended', 'fe', $builder->expr()->eq('f.fileid', 'fe.fileid'))
-			->where($builder->expr()->eq('storage_id', $builder->createPositionalParameter(1001001, IQueryBuilder::PARAM_INT)));
+			->where($builder->expr()->eq('storage_id', $builder->createNamedParameter(1001001, IQueryBuilder::PARAM_INT)));
 
-		$query->andWhere($builder->expr()->eq('user_id', $builder->createPositionalParameter('partitioned_test')));
+		$query->andWhere($builder->expr()->eq('user_id', $builder->createNamedParameter('partitioned_test')));
+
+		$this->assertEquals(2, $query->getPartitionCount());
 
 		$results = $query->executeQuery()->fetchAll();
 		$this->assertCount(1, $results);
@@ -145,5 +165,53 @@ class PartitionedQueryBuilderTest extends TestCase {
 		$this->assertEquals($results[0]['mount_provider_class'], 'test');
 		$this->assertEquals($results[0]['path'], 'file1');
 		$this->assertEquals($results[0]['upload_time'], 1234);
+	}
+
+	public function testPartitionedQueryFromSplit() {
+		$this->setupFileCache();
+		$builder = $this->getQueryBuilder();
+		$builder->addPartition(new PartitionSplit('filecache', ['filecache']));
+
+		$query = $builder->select('storage', 'm.root_id', 'm.user_id', 'm.mount_point', 'm.mount_id', 'path', 'm.mount_provider_class')
+			->from('filecache', 'f')
+			->innerJoin('f', 'mounts', 'm', $builder->expr()->eq('m.root_id', 'f.fileid'));
+		$query->where($builder->expr()->eq('storage', $builder->createNamedParameter(1001001, IQueryBuilder::PARAM_INT)));
+
+		$query->andWhere($builder->expr()->eq('m.user_id', $builder->createNamedParameter('partitioned_test')));
+
+		$this->assertEquals(2, $query->getPartitionCount());
+
+		$results = $query->executeQuery()->fetchAll();
+		$this->assertCount(1, $results);
+		$this->assertEquals($results[0]['user_id'], 'partitioned_test');
+		$this->assertEquals($results[0]['mount_point'], '/mount/point');
+		$this->assertEquals($results[0]['mount_provider_class'], 'test');
+		$this->assertEquals($results[0]['path'], 'file1');
+	}
+
+	public function testMultiJoinPartitionedQuery() {
+		$this->setupFileCache();
+		$builder = $this->getQueryBuilder();
+		$builder->addPartition(new PartitionSplit('filecache', ['filecache']));
+
+		// query borrowed from UserMountCache
+		$query = $builder->select('storage_id', 'root_id', 'user_id', 'mount_point', 'mount_id', 'f.path', 'mount_provider_class')
+			->selectAlias('s.id', 'storage_string_id')
+			->from('mounts', 'm')
+			->innerJoin('m', 'filecache', 'f', $builder->expr()->eq('m.root_id', 'f.fileid'))
+			->innerJoin('f', 'storages', 's', $builder->expr()->eq('f.storage', 's.numeric_id'))
+			->where($builder->expr()->eq('storage_id', $builder->createNamedParameter(1001001, IQueryBuilder::PARAM_INT)));
+
+		$query->andWhere($builder->expr()->eq('user_id', $builder->createNamedParameter('partitioned_test')));
+
+		$this->assertEquals(3, $query->getPartitionCount());
+
+		$results = $query->executeQuery()->fetchAll();
+		$this->assertCount(1, $results);
+		$this->assertEquals($results[0]['user_id'], 'partitioned_test');
+		$this->assertEquals($results[0]['mount_point'], '/mount/point');
+		$this->assertEquals($results[0]['mount_provider_class'], 'test');
+		$this->assertEquals($results[0]['path'], 'file1');
+		$this->assertEquals($results[0]['storage_string_id'], 'test1');
 	}
 }

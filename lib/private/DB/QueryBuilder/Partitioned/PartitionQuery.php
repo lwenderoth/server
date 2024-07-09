@@ -28,6 +28,7 @@ use OCP\DB\QueryBuilder\IQueryBuilder;
 class PartitionQuery {
 	const JOIN_MODE_INNER = 'inner';
 	const JOIN_MODE_LEFT = 'left';
+	const JOIN_MODE_RIGHT = 'left';
 
 	public function __construct(
 		public IQueryBuilder $query,
@@ -36,6 +37,9 @@ class PartitionQuery {
 		public string $joinMode,
 	) {
 		$this->query->select($joinFromColumn);
+		if ($joinMode !== self::JOIN_MODE_LEFT && $joinMode !== self::JOIN_MODE_INNER) {
+			throw new InvalidPartitionedQueryException("$joinMode joins aren't allowed in partitioned queries");
+		}
 	}
 
 	public function mergeWith(array $rows): array {

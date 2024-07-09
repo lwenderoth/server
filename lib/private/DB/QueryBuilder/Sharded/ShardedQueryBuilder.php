@@ -316,6 +316,23 @@ class ShardedQueryBuilder extends QueryBuilder {
 				$shardConnection = $this->shardConnectionManager->getConnection($this->shardDefinition, $shard);
 				if (!$this->primaryKeys && $this->shardDefinition->table === $this->insertTable) {
 					// todo: is random primary key fine, or do we need to do shared-autoincrement
+					/**
+					 * atomic autoincrement:
+					 *
+					 * $next = $cache->inc('..');
+					 * if (!$next) {
+					 *     $last = $this->getMaxValue();
+					 *	   $success = $cache->add('..', $last + 1);
+					 *	   if ($success) {
+					 *	       return $last + 1;
+					 *	   } else {
+					 * 		   / somebody else set it
+					 *	       return $cache->inc('..');
+					 *	   }
+					 * } else {
+					 *     return $next
+					 * }
+					 */
 					$id = random_int(0, PHP_INT_MAX);
 					$this->setValue($this->shardDefinition->primaryKey, $this->createNamedParameter($id, self::PARAM_INT));
 					$this->lastInsertId = $id;
