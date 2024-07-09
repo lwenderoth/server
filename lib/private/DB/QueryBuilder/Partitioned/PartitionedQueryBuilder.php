@@ -24,6 +24,7 @@ declare(strict_types=1);
 namespace OC\DB\QueryBuilder\Partitioned;
 
 use OC\DB\ConnectionAdapter;
+use OC\DB\QueryBuilder\CompositeExpression;
 use OC\DB\QueryBuilder\ExtendedQueryBuilder;
 use OC\DB\QueryBuilder\Sharded\ShardConnectionManager;
 use OC\DB\QueryBuilder\Sharded\ShardedQueryBuilder;
@@ -261,7 +262,21 @@ class PartitionedQueryBuilder extends ExtendedQueryBuilder {
 		}
 	}
 
+	private function flattenPredicates(array $predicates): array {
+		$result = [];
+		foreach ($predicates as $predicate) {
+			if ($predicate instanceof CompositeExpression && $predicate->getType() === CompositeExpression::TYPE_AND) {
+				$result = array_merge($result, $this->flattenPredicates($predicate->getParts()));
+			} else {
+				$result[] = $predicate;
+			}
+		}
+		return $result;
+	}
+
 	private function splitPredicatesByParts(array $predicates): array {
+		$predicates = $this->flattenPredicates($predicates);
+
 		$partitionPredicates = [];
 		foreach ($predicates as $predicate) {
 			$partition = $this->getPartitionForPredicate((string) $predicate);
