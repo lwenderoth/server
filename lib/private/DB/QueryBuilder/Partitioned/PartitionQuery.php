@@ -53,7 +53,7 @@ class PartitionQuery {
 		$joinToValues = array_map(function (array $row) use ($joinToColumn) {
 			return $row[$joinToColumn];
 		}, $rows);
-		$this->query->andWhere($this->query->expr()->in($this->joinFromColumn, $this->query->createNamedParameter($joinToValues, IQueryBuilder::PARAM_STR_ARRAY)));
+		$this->query->andWhere($this->query->expr()->in($this->joinFromColumn, $this->query->createNamedParameter($joinToValues, IQueryBuilder::PARAM_STR_ARRAY, ':' . uniqid())));
 
 		$partitionedRows = $this->query->executeQuery()->fetchAll();
 		$partitionedRowsByKey = [];
