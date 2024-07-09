@@ -10,6 +10,7 @@ declare(strict_types=1);
 namespace OCA\DAV\Controller;
 
 use OCA\DAV\AppInfo\Application;
+use OCA\DAV\ResponseDefinitions;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
@@ -20,6 +21,9 @@ use OCP\Calendar\IManager;
 use OCP\IRequest;
 use function array_map;
 
+/**
+ * @psalm-import-type DAVUpcomingEvent from ResponseDefinitions
+ */
 class UpcomingEventsController extends OCSController {
 	private IManager $calendarManager;
 	private ?string $userId;
@@ -39,11 +43,17 @@ class UpcomingEventsController extends OCSController {
 
 	/**
 	 * Get information about upcoming events
+	 *
+	 * @param string|null $location location/URL to filter by
+	 * @return DataResponse<Http::STATUS_OK, array{events: DAVUpcomingEvent[]}, array{}>|DataResponse<Http::STATUS_UNAUTHORIZED, null, array{}>
+	 *
+	 * 200: Bla
+	 * 401: When not authenticated
 	 */
 	#[NoAdminRequired]
 	public function getEvents(string $location = null): DataResponse {
 		if ($this->userId === null) {
-			return new DataResponse(null, Http::STATUS_NOT_FOUND);
+			return new DataResponse(null, Http::STATUS_UNAUTHORIZED);
 		}
 
 		// TODO: move logic into a service class
@@ -64,7 +74,7 @@ class UpcomingEventsController extends OCSController {
 			'events' => array_map(function ($event) {
 				return [
 					'uri' => $event['uri'],
-					'calendar-id' => (int) $event['calendar-key'],
+					'calendarId' => (int) $event['calendar-key'],
 					'start' => $event['objects'][0]['DTSTART'][0]?->getTimestamp(),
 					'summary' => $event['objects'][0]['SUMMARY'][0] ?? null,
 					'location' => $event['objects'][0]['LOCATION'][0] ?? null,

@@ -41,7 +41,7 @@ class UpcomingEventsControllerTest extends TestCase {
 		$response = $this->controller->getEvents('https://cloud.example.com/call/123');
 
 		self::assertNull($response->getData());
-		self::assertSame(404, $response->getStatus());
+		self::assertSame(401, $response->getStatus());
 	}
 
 	public function testGetEventsByLocation() {

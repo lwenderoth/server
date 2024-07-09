@@ -31,6 +31,14 @@ namespace OCA\DAV;
  *     endDate: int,
  *     shortMessage: string,
  * }
+ *
+ * @psalm-type DAVUpcomingEvent = array{
+ *      uri: string,
+ *      calendarId: string,
+ *      start: int,
+ *      summary: string,
+ *      location: ?string,
+ *  }
  */
 class ResponseDefinitions {
 }
