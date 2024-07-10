@@ -36,7 +36,6 @@ class PartitionQuery {
 		public string $joinToColumn,
 		public string $joinMode,
 	) {
-		$this->query->select($joinFromColumn);
 		if ($joinMode !== self::JOIN_MODE_LEFT && $joinMode !== self::JOIN_MODE_INNER) {
 			throw new InvalidPartitionedQueryException("$joinMode joins aren't allowed in partitioned queries");
 		}
@@ -50,20 +49,21 @@ class PartitionQuery {
 		$joinFromColumn = preg_replace('/\w+\./', '', $this->joinFromColumn);
 		$joinToColumn = preg_replace('/\w+\./', '', $this->joinToColumn);
 
-		$joinToValues = array_map(function (array $row) use ($joinToColumn) {
-			return $row[$joinToColumn];
+		$joinFromValues = array_map(function (array $row) use ($joinFromColumn) {
+			return $row[$joinFromColumn];
 		}, $rows);
-		$this->query->andWhere($this->query->expr()->in($this->joinFromColumn, $this->query->createNamedParameter($joinToValues, IQueryBuilder::PARAM_STR_ARRAY, ':' . uniqid())));
+		$this->query->andWhere($this->query->expr()->in($this->joinToColumn, $this->query->createNamedParameter($joinFromValues, IQueryBuilder::PARAM_STR_ARRAY, ':' . uniqid())));
 
+		$s = $this->query->getSQL();
 		$partitionedRows = $this->query->executeQuery()->fetchAll();
 		$partitionedRowsByKey = [];
 		foreach ($partitionedRows as $partitionedRow) {
-			$partitionedRowsByKey[$partitionedRow[$joinFromColumn]] = $partitionedRow;
+			$partitionedRowsByKey[$partitionedRow[$joinToColumn]] = $partitionedRow;
 		}
 		$result = [];
 		foreach ($rows as $row) {
-			if (isset($partitionedRowsByKey[$row[$joinToColumn]])) {
-				$result[] = array_merge($row, $partitionedRowsByKey[$row[$joinToColumn]]);
+			if (isset($partitionedRowsByKey[$row[$joinFromColumn]])) {
+				$result[] = array_merge($row, $partitionedRowsByKey[$row[$joinFromColumn]]);
 			} elseif ($this->joinMode === self::JOIN_MODE_LEFT) {
 				$result[] = $row;
 			}

@@ -79,18 +79,16 @@ class ShardedQueryBuilder extends QueryBuilder {
 	}
 
 	public function where(...$predicates) {
-		foreach ($predicates as $predicate) {
-			$this->tryLoadShardKey($predicate);
-		}
-		parent::where(...$predicates);
-		return $this;
+		return $this->andWhere(...$predicates);
 	}
 
 	public function andWhere(...$where) {
-		foreach ($where as $predicate) {
-			$this->tryLoadShardKey($predicate);
+		if ($where) {
+			foreach ($where as $predicate) {
+				$this->tryLoadShardKey($predicate);
+			}
+			parent::andWhere(...$where);
 		}
-		parent::andWhere(...$where);
 		return $this;
 	}
 

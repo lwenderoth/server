@@ -164,17 +164,17 @@ class PartitionedQueryBuilder extends ExtendedQueryBuilder {
 		$fromPartition = $this->getPartition($fromAlias);
 		if ($partition && $partition !== $this->mainPartition) {
 			// join from the main db to a partition
-			['from' => $joinFrom, 'to' => $joinTo] = $this->splitJoinCondition($condition, $join, $alias);
+			$joinCondition = JoinCondition::parse($condition, $join, $alias, $fromAlias);
 			$partition->addAlias($join, $alias);
 			if (!isset($this->splitQueries[$partition->name])) {
 				$this->splitQueries[$partition->name] = new PartitionQuery(
 					$this->newQuery(),
-					$joinFrom, $joinTo,
+					$joinCondition->fromColumn, $joinCondition->toColumn,
 					$joinMode
 				);
 				$this->splitQueries[$partition->name]->query->from($join, $alias);
-				$this->ensureSelect($joinFrom);
-				$this->ensureSelect($joinTo);
+				$this->ensureSelect($joinCondition->fromColumn);
+				$this->ensureSelect($joinCondition->toColumn);
 			} else {
 				$query = $this->splitQueries[$partition->name]->query;
 				if ($partition->containsAlias($fromAlias)) {
@@ -183,10 +183,12 @@ class PartitionedQueryBuilder extends ExtendedQueryBuilder {
 					throw new InvalidPartitionedQueryException("Can't join across partition boundaries more than once");
 				}
 			}
+			$this->splitQueries[$partition->name]->query->andWhere(...$joinCondition->toConditions);
+			parent::andWhere(...$joinCondition->fromConditions);
 			return $this;
 		} elseif ($fromPartition && $fromPartition !== $partition) {
 			// join from partition, to the main db
-			['from' => $joinFrom, 'to' => $joinTo] = $this->splitJoinCondition($condition, $join, $alias);
+			$joinCondition = JoinCondition::parse($condition, $join, $alias, $fromAlias);
 			if (str_starts_with($fromPartition->name, 'from_')) {
 				$partitionName = $fromPartition->name;
 			} else {
@@ -199,12 +201,14 @@ class PartitionedQueryBuilder extends ExtendedQueryBuilder {
 
 				$this->splitQueries[$partitionName] = new PartitionQuery(
 					$this->newQuery(),
-					$joinFrom, $joinTo,
+					$joinCondition->fromColumn, $joinCondition->toColumn,
 					$joinMode
 				);
-				$this->ensureSelect($joinFrom);
-				$this->ensureSelect($joinTo);
+				$this->ensureSelect($joinCondition->fromColumn);
+				$this->ensureSelect($joinCondition->toColumn);
 				$this->splitQueries[$partitionName]->query->from($join, $alias);
+				$this->splitQueries[$partitionName]->query->andWhere(...$joinCondition->toConditions);
+				parent::andWhere(...$joinCondition->fromConditions);
 			} else {
 				$fromPartition->addTable($join);
 				$fromPartition->addAlias($join, $alias);
@@ -224,41 +228,6 @@ class PartitionedQueryBuilder extends ExtendedQueryBuilder {
 			} else {
 				throw new \InvalidArgumentException("Invalid join mode: $joinMode");
 			}
-		}
-	}
-
-	/**
-	 * @param $condition
-	 * @param string $join
-	 * @param string $alias
-	 * @return array{'from' => string, 'to' => string}
-	 * @throws InvalidPartitionedQueryException
-	 */
-	private function splitJoinCondition($condition, string $join, string $alias): array {
-		if ($condition === null) {
-			throw new InvalidPartitionedQueryException("Can't join on $join without a condition");
-		}
-		$condition = str_replace('`', '', (string) $condition);
-		// expect a condition in the form of 'alias1.column1 = alias2.column2'
-		if (substr_count($condition, ' ') > 2) {
-			throw new InvalidPartitionedQueryException("Can only join on $join with a single condition");
-		}
-		if (!str_contains($condition, ' = ')) {
-			throw new InvalidPartitionedQueryException("Can only join on $join with an `eq` condition");
-		}
-		$parts = explode(' = ', $condition);
-		if (str_starts_with($parts[0], "$alias.")) {
-			return [
-				'from' => $parts[0],
-				'to' => $parts[1],
-			];
-		} elseif (str_starts_with($parts[1], "$alias.")) {
-			return [
-				'from' => $parts[1],
-				'to' => $parts[0],
-			];
-		} else {
-			throw new InvalidPartitionedQueryException("join condition for $join needs to explicitly refer to the table or alias");
 		}
 	}
 
@@ -292,22 +261,17 @@ class PartitionedQueryBuilder extends ExtendedQueryBuilder {
 	}
 
 	public function where(...$predicates) {
-		foreach ($this->splitPredicatesByParts($predicates) as $alias => $predicates) {
-			if ($alias !== '' && isset($this->splitQueries[$alias])) {
-				$this->splitQueries[$alias]->query->where(...$predicates);
-			} else {
-				parent::where(...$predicates);
-			}
-		}
-		return $this;
+		return $this->andWhere(...$predicates);
 	}
 
 	public function andWhere(...$where) {
-		foreach ($this->splitPredicatesByParts($where) as $alias => $predicates) {
-			if (isset($this->splitQueries[$alias])) {
-				$this->splitQueries[$alias]->query->andWhere(...$predicates);
-			} else {
-				parent::andWhere(...$predicates);
+		if ($where) {
+			foreach ($this->splitPredicatesByParts($where) as $alias => $predicates) {
+				if (isset($this->splitQueries[$alias])) {
+					$this->splitQueries[$alias]->query->andWhere(...$predicates);
+				} else {
+					parent::andWhere(...$predicates);
+				}
 			}
 		}
 		return $this;
