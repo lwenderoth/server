@@ -269,6 +269,12 @@ class PartitionedQueryBuilder extends ExtendedQueryBuilder {
 			foreach ($this->splitPredicatesByParts($where) as $alias => $predicates) {
 				if (isset($this->splitQueries[$alias])) {
 					$this->splitQueries[$alias]->query->andWhere(...$predicates);
+
+					// when there is a condition on a table being left-joined it starts to behave as if it's an inner join
+					// since any joined column that doesn't have the left part will not match the condition
+					if ($this->splitQueries[$alias]->joinMode === PartitionQuery::JOIN_MODE_LEFT) {
+						$this->splitQueries[$alias]->joinMode = PartitionQuery::JOIN_MODE_INNER;
+					}
 				} else {
 					parent::andWhere(...$predicates);
 				}
