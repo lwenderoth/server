@@ -148,6 +148,13 @@ class ShardedQueryBuilder extends QueryBuilder {
 		return [];
 	}
 
+	public function set($key, $value) {
+		if ($this->shardDefinition && $key === $this->shardDefinition->shardKey) {
+			throw new InvalidShardedQueryException("Changing the sharding key with an update isn't allowed");
+		}
+		return parent::set($key, $value);
+	}
+
 	public function setValue($column, $value) {
 		if ($this->shardDefinition) {
 			if ($column === $this->shardDefinition->primaryKey) {
