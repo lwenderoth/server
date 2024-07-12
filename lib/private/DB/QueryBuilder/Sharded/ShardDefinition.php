@@ -16,13 +16,15 @@ class ShardDefinition {
 	 * @param string $table
 	 * @param string $primaryKey
 	 * @param string $shardKey
+	 * @param string[] $companionKeys
+	 * @param IShardMapper $shardMapper
 	 * @param string[] $companionTables
 	 * @param array $shards
-	 * @param IShardMapper $shardMapper
 	 */
 	public function __construct(
 		public string $table,
 		public string $primaryKey,
+		public array $companionKeys,
 		public string $shardKey,
 		public IShardMapper $shardMapper,
 		public array $companionTables = [],
@@ -43,5 +45,9 @@ class ShardDefinition {
 
 	public function getAllShards(): array {
 		return range(0, count($this->shards) - 1);
+	}
+
+	public function isKey(string $column): bool {
+		return $column === $this->primaryKey || in_array($column, $this->companionKeys);
 	}
 }

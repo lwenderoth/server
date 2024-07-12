@@ -103,6 +103,11 @@ class ShardedQueryBuilder extends QueryBuilder {
 		if ($keys = $this->tryExtractShardKeys($predicate, $this->shardDefinition->primaryKey)) {
 			$this->primaryKeys += $keys;
 		}
+		foreach ($this->shardDefinition->companionKeys as $companionKey) {
+			if ($keys = $this->tryExtractShardKeys($predicate, $companionKey)) {
+				$this->primaryKeys += $keys;
+			}
+		}
 	}
 
 	/**
@@ -158,7 +163,7 @@ class ShardedQueryBuilder extends QueryBuilder {
 
 	public function setValue($column, $value) {
 		if ($this->shardDefinition) {
-			if ($column === $this->shardDefinition->primaryKey) {
+			if ($this->shardDefinition->isKey($column)) {
 				$this->primaryKeys[] = $value;
 			}
 			if ($column === $this->shardDefinition->shardKey) {
@@ -242,7 +247,7 @@ class ShardedQueryBuilder extends QueryBuilder {
 	}
 
 	public function hintShardKey(string $column, mixed $value) {
-		if ($column === $this->shardDefinition?->primaryKey) {
+		if ($this->shardDefinition?->isKey($column)) {
 			$this->primaryKeys[] = $value;
 		}
 		if ($column === $this->shardDefinition?->shardKey) {
