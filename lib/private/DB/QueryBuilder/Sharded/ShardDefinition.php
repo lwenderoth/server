@@ -37,7 +37,7 @@ class ShardDefinition {
 		return in_array($table, $this->companionTables);
 	}
 
-	public function getShardForKey(string $key): int {
+	public function getShardForKey(int $key): int {
 		return $this->shardMapper->getShardForKey($key, count($this->shards));
 	}
 

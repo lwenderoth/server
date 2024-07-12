@@ -286,8 +286,8 @@ class ShardedQueryBuilder extends QueryBuilder {
 			// todo: get shard keys from cache by primary keys
 			return $this->shardDefinition->getAllShards();
 		}
-		$shards = array_map(function (string $shardKey) {
-			return $this->shardDefinition->getShardForKey($shardKey);
+		$shards = array_map(function ($shardKey) {
+			return $this->shardDefinition->getShardForKey((int)$shardKey);
 		}, $shardKeys);
 		return array_values(array_unique($shards));
 	}
