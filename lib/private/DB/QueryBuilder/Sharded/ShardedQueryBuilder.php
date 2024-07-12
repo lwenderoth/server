@@ -363,7 +363,8 @@ class ShardedQueryBuilder extends QueryBuilder {
 					 * }
 					 */
 					$id = random_int(0, PHP_INT_MAX);
-					$this->setValue($this->shardDefinition->primaryKey, $this->createNamedParameter($id, self::PARAM_INT));
+					parent::setValue($this->shardDefinition->primaryKey, $this->createParameter('__generated_primary_key'));
+					$this->setParameter('__generated_primary_key', $id, self::PARAM_INT);
 					$this->lastInsertId = $id;
 				}
 				$count += parent::executeStatement($shardConnection);
