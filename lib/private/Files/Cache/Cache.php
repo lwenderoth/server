@@ -657,7 +657,10 @@ class Cache implements ICache {
 			}
 
 			$shardDefinition = $this->connection->getShardDefinition('filecache');
-			if ($sourceCache->getNumericStorageId() !== $this->getNumericStorageId() && $shardDefinition) {
+			if (
+				$shardDefinition &&
+				$shardDefinition->getShardForKey($sourceCache->getNumericStorageId()) !== $shardDefinition->getShardForKey($this->getNumericStorageId())
+			) {
 				$this->moveFromStorageSharded($shardDefinition, $sourceCache, $sourceData, $targetPath);
 				return;
 			}
@@ -1203,7 +1206,6 @@ class Cache implements ICache {
 	}
 
 	private function moveFromStorageSharded(ShardDefinition $shardDefinition, ICache $sourceCache, ICacheEntry $sourceEntry, $targetPath) {
-		// todo: optimize for the source shard == target shard case
 		if ($sourceEntry->getMimeType() === ICacheEntry::DIRECTORY_MIMETYPE) {
 			$fileIds = $this->getChildIds($sourceCache->getNumericStorageId(), $sourceEntry->getPath());
 		} else {

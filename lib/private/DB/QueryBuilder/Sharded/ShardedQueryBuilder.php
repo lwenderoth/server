@@ -27,6 +27,7 @@ class ShardedQueryBuilder extends QueryBuilder {
 	private ?string $insertTable = null;
 	private mixed $lastInsertId = null;
 	private ?IDBConnection $lastInsertConnection = null;
+	private ?int $updateShardKey = null;
 
 	/**
 	 * @param ConnectionAdapter $connection
@@ -150,7 +151,7 @@ class ShardedQueryBuilder extends QueryBuilder {
 
 	public function set($key, $value) {
 		if ($this->shardDefinition && $key === $this->shardDefinition->shardKey) {
-			throw new InvalidShardedQueryException("Changing the sharding key with an update isn't allowed");
+			$updateShardKey = $value;
 		}
 		return parent::set($key, $value);
 	}
@@ -270,6 +271,24 @@ class ShardedQueryBuilder extends QueryBuilder {
 		if ($this->shardDefinition && !$this->allShards) {
 			if (empty($this->getShardKeys()) && empty($this->getPrimaryKeys())) {
 				throw new InvalidShardedQueryException("No shard key or primary key set for query");
+			}
+		}
+		if ($this->shardDefinition && $this->updateShardKey) {
+			$newShardKey = $this->getKeyValue($this->updateShardKey);
+			$oldShardKeys = $this->getShardKeys();
+			if (count($newShardKey) !== 1) {
+				throw new InvalidShardedQueryException("Can't set shard key to an array");
+			}
+			$newShardKey = current($newShardKey);
+			if (empty($oldShardKeys)) {
+				throw new InvalidShardedQueryException("Can't update without shard key");
+			}
+			$oldShards = array_values(array_unique(array_map(function($shardKey) {
+				return $this->shardDefinition->getShardForKey((int)$shardKey);
+			}, $oldShardKeys)));
+			$newShard = $this->shardDefinition->getShardForKey((int)$newShardKey);
+			if ($oldShards === [$newShard]) {
+				throw new InvalidShardedQueryException("Update statement would move rows to a different shard");
 			}
 		}
 	}
