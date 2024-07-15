@@ -26,6 +26,7 @@ namespace OC\DB\QueryBuilder\Partitioned;
 use OC\DB\ConnectionAdapter;
 use OC\DB\QueryBuilder\CompositeExpression;
 use OC\DB\QueryBuilder\ExtendedQueryBuilder;
+use OC\DB\QueryBuilder\QuoteHelper;
 use OC\DB\QueryBuilder\Sharded\ShardConnectionManager;
 use OC\DB\QueryBuilder\Sharded\ShardedQueryBuilder;
 use OC\SystemConfig;
@@ -44,6 +45,7 @@ class PartitionedQueryBuilder extends ExtendedQueryBuilder {
 	private array $selects = [];
 	private ?PartitionSplit $mainPartition = null;
 	private bool $hasPositionalParameter = false;
+	private QuoteHelper $quoteHelper;
 
 	public function __construct(
 		private ConnectionAdapter              $connection,
@@ -53,6 +55,7 @@ class PartitionedQueryBuilder extends ExtendedQueryBuilder {
 		private ShardConnectionManager $shardConnectionManager,
 	) {
 		parent::__construct($this->newQuery());
+		$this->quoteHelper = new QuoteHelper();
 	}
 
 	private function newQuery(): IQueryBuilder {
@@ -268,12 +271,22 @@ class PartitionedQueryBuilder extends ExtendedQueryBuilder {
 		if ($where) {
 			foreach ($this->splitPredicatesByParts($where) as $alias => $predicates) {
 				if (isset($this->splitQueries[$alias])) {
-					$this->splitQueries[$alias]->query->andWhere(...$predicates);
-
 					// when there is a condition on a table being left-joined it starts to behave as if it's an inner join
 					// since any joined column that doesn't have the left part will not match the condition
+					// when there the condition is `$joinToColumn IS NULL` we instead mark the query as excluding the left half
 					if ($this->splitQueries[$alias]->joinMode === PartitionQuery::JOIN_MODE_LEFT) {
 						$this->splitQueries[$alias]->joinMode = PartitionQuery::JOIN_MODE_INNER;
+
+						$column = $this->quoteHelper->quoteColumnName($this->splitQueries[$alias]->joinToColumn);
+						foreach ($predicates as $predicate) {
+							if ((string)$predicate === "$column IS NULL") {
+								$this->splitQueries[$alias]->joinMode = PartitionQuery::JOIN_MODE_LEFT_NULL;
+							} else {
+								$this->splitQueries[$alias]->query->andWhere($predicate);
+							}
+						}
+					} else {
+						$this->splitQueries[$alias]->query->andWhere(...$predicates);
 					}
 				} else {
 					parent::andWhere(...$predicates);

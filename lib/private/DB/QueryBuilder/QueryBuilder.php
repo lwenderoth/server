@@ -1345,5 +1345,4 @@ class QueryBuilder implements IQueryBuilder {
 		// noop
 		return $this;
 	}
-
 }
