@@ -10,15 +10,23 @@ namespace OC\DB\QueryBuilder\Sharded;
 
 use OC\DB\ConnectionAdapter;
 use OC\DB\QueryBuilder\CompositeExpression;
+use OC\DB\QueryBuilder\ExtendedQueryBuilder;
 use OC\DB\QueryBuilder\Parameter;
 use OC\DB\QueryBuilder\QueryBuilder;
 use OC\DB\ArrayResult;
 use OC\SystemConfig;
 use OCP\DB\IResult;
+use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
 use Psr\Log\LoggerInterface;
 
-class ShardedQueryBuilder extends QueryBuilder {
+/**
+ * Query builder that automatically distributes queries on a sharded table across the relevant shards
+ *
+ * This assumes that the query either only touches tables that are part of the shard, or tables that aren't part of the shard.
+ * This assumption is enforced by the PartitionedQueryBuilder
+ */
+class ShardedQueryBuilder extends ExtendedQueryBuilder {
 	private array $shardKeys = [];
 	private array $primaryKeys = [];
 	private ?ShardDefinition $shardDefinition = null;
@@ -36,13 +44,11 @@ class ShardedQueryBuilder extends QueryBuilder {
 	 * @param ShardDefinition[] $shardDefinitions
 	 */
 	public function __construct(
-		ConnectionAdapter              $connection,
-		SystemConfig                   $systemConfig,
-		LoggerInterface                $logger,
+		IQueryBuilder                  $builder,
 		private array                  $shardDefinitions,
 		private ShardConnectionManager $shardConnectionManager,
 	) {
-		parent::__construct($connection, $systemConfig, $logger);
+		parent::__construct($builder);
 	}
 
 	public function getShardKeys(): array {

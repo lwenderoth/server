@@ -10,7 +10,9 @@ namespace Test\DB\QueryBuilder\Partitioned;
 
 use OC\DB\QueryBuilder\Partitioned\PartitionSplit;
 use OC\DB\QueryBuilder\Partitioned\PartitionedQueryBuilder;
+use OC\DB\QueryBuilder\QueryBuilder;
 use OC\DB\QueryBuilder\Sharded\ShardConnectionManager;
+use OC\DB\QueryBuilder\Sharded\ShardedQueryBuilder;
 use OC\SystemConfig;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
@@ -32,6 +34,8 @@ class PartitionedQueryBuilderTest extends TestCase {
 		$this->systemConfig = Server::get(SystemConfig::class);
 		$this->logger = Server::get(LoggerInterface::class);
 		$this->shardConnectionManager = Server::get(ShardConnectionManager::class);
+
+		$this->setupFileCache();
 	}
 
 	protected function tearDown(): void {
@@ -41,11 +45,17 @@ class PartitionedQueryBuilderTest extends TestCase {
 
 
 	private function getQueryBuilder(): PartitionedQueryBuilder {
-		return new PartitionedQueryBuilder($this->connection, $this->systemConfig, $this->logger, [], $this->shardConnectionManager);
+		$builder = $this->connection->getQueryBuilder();
+		if ($builder instanceof PartitionedQueryBuilder) {
+			return $builder;
+		} else {
+			return new PartitionedQueryBuilder($builder, [], $this->shardConnectionManager);
+		}
 	}
 
 	private function setupFileCache() {
-		$query = $this->connection->getQueryBuilder();
+		$this->cleanupDb();
+		$query = $this->getQueryBuilder();
 		$query->insert('storages')
 			->values([
 				'numeric_id' => $query->createNamedParameter(1001001, IQueryBuilder::PARAM_INT),
@@ -53,7 +63,7 @@ class PartitionedQueryBuilderTest extends TestCase {
 			]);
 		$query->executeStatement();
 
-		$query = $this->connection->getQueryBuilder();
+		$query = $this->getQueryBuilder();
 		$query->insert('filecache')
 			->values([
 				'storage' => $query->createNamedParameter(1001001, IQueryBuilder::PARAM_INT),
@@ -63,7 +73,7 @@ class PartitionedQueryBuilderTest extends TestCase {
 		$query->executeStatement();
 		$fileId = $query->getLastInsertId();
 
-		$query = $this->connection->getQueryBuilder();
+		$query = $this->getQueryBuilder();
 		$query->insert('filecache_extended')
 			->hintShardKey('storage', 1001001)
 			->values([
@@ -72,7 +82,7 @@ class PartitionedQueryBuilderTest extends TestCase {
 			]);
 		$query->executeStatement();
 
-		$query = $this->connection->getQueryBuilder();
+		$query = $this->getQueryBuilder();
 		$query->insert('mounts')
 			->values([
 				'storage_id' => $query->createNamedParameter(1001001, IQueryBuilder::PARAM_INT),
@@ -85,28 +95,29 @@ class PartitionedQueryBuilderTest extends TestCase {
 	}
 
 	private function cleanupDb() {
-		$query = $this->connection->getQueryBuilder();
+		$query = $this->getQueryBuilder();
 		$query->delete('storages')
 			->where($query->expr()->gt('numeric_id', $query->createNamedParameter(1000000, IQueryBuilder::PARAM_INT)));
 		$query->executeStatement();
 
-		$query = $this->connection->getQueryBuilder();
+		$query = $this->getQueryBuilder();
 		$query->delete('filecache')
-			->where($query->expr()->gt('storage', $query->createNamedParameter(1000000, IQueryBuilder::PARAM_INT)));
+			->where($query->expr()->gt('storage', $query->createNamedParameter(1000000, IQueryBuilder::PARAM_INT)))
+			->runAcrossAllShards();
 		$query->executeStatement();
 
-		$query = $this->connection->getQueryBuilder();
-		$query->delete('filecache_extended');
+		$query = $this->getQueryBuilder();
+		$query->delete('filecache_extended')
+			->runAcrossAllShards();
 		$query->executeStatement();
 
-		$query = $this->connection->getQueryBuilder();
+		$query = $this->getQueryBuilder();
 		$query->delete('mounts')
 			->where($query->expr()->like('user_id', $query->createNamedParameter('partitioned_%')));
 		$query->executeStatement();
 	}
 
 	public function testSimpleOnlyPartitionQuery() {
-		$this->setupFileCache();
 		$builder = $this->getQueryBuilder();
 		$builder->addPartition(new PartitionSplit('filecache', ['filecache']));
 
@@ -121,7 +132,6 @@ class PartitionedQueryBuilderTest extends TestCase {
 	}
 
 	public function testSimplePartitionedQuery() {
-		$this->setupFileCache();
 		$builder = $this->getQueryBuilder();
 		$builder->addPartition(new PartitionSplit('filecache', ['filecache']));
 
@@ -144,7 +154,6 @@ class PartitionedQueryBuilderTest extends TestCase {
 	}
 
 	public function testMultiTablePartitionedQuery() {
-		$this->setupFileCache();
 		$builder = $this->getQueryBuilder();
 		$builder->addPartition(new PartitionSplit('filecache', ['filecache', 'filecache_extended']));
 
@@ -168,7 +177,6 @@ class PartitionedQueryBuilderTest extends TestCase {
 	}
 
 	public function testPartitionedQueryFromSplit() {
-		$this->setupFileCache();
 		$builder = $this->getQueryBuilder();
 		$builder->addPartition(new PartitionSplit('filecache', ['filecache']));
 
@@ -190,7 +198,6 @@ class PartitionedQueryBuilderTest extends TestCase {
 	}
 
 	public function testMultiJoinPartitionedQuery() {
-		$this->setupFileCache();
 		$builder = $this->getQueryBuilder();
 		$builder->addPartition(new PartitionSplit('filecache', ['filecache']));
 

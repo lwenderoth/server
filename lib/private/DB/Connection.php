@@ -218,11 +218,14 @@ class Connection extends PrimaryReadReplicaConnection {
 	 */
 	public function getQueryBuilder(): IQueryBuilder {
 		$this->queriesBuilt++;
+		$builder = new QueryBuilder(
+			new ConnectionAdapter($this),
+			$this->systemConfig,
+			$this->logger
+		);
 		if (count($this->partitions) > 0) {
 			$builder = new PartitionedQueryBuilder(
-				new ConnectionAdapter($this),
-				$this->systemConfig,
-				$this->logger,
+				$builder,
 				$this->shards,
 				$this->shardConnectionManager,
 			);
@@ -232,11 +235,7 @@ class Connection extends PrimaryReadReplicaConnection {
 			}
 			return $builder;
 		} else {
-			return new QueryBuilder(
-				new ConnectionAdapter($this),
-				$this->systemConfig,
-				$this->logger
-			);
+			return $builder;
 		}
 	}
 

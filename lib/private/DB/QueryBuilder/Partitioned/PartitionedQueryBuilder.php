@@ -35,7 +35,7 @@ use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
 use Psr\Log\LoggerInterface;
 
-class PartitionedQueryBuilder extends ExtendedQueryBuilder {
+class PartitionedQueryBuilder extends ShardedQueryBuilder {
 	/** @var array<string, PartitionQuery> $splitQueries */
 	private array $splitQueries = [];
 	/** @var list<PartitionSplit> */
@@ -48,21 +48,17 @@ class PartitionedQueryBuilder extends ExtendedQueryBuilder {
 	private QuoteHelper $quoteHelper;
 
 	public function __construct(
-		private ConnectionAdapter              $connection,
-		private SystemConfig                   $systemConfig,
-		private LoggerInterface                $logger,
+		IQueryBuilder                  $builder,
 		private array                  $shardDefinitions,
 		private ShardConnectionManager $shardConnectionManager,
 	) {
-		parent::__construct($this->newQuery());
+		parent::__construct($builder, $this->shardDefinitions, $this->shardConnectionManager);
 		$this->quoteHelper = new QuoteHelper();
 	}
 
 	private function newQuery(): IQueryBuilder {
 		return new ShardedQueryBuilder(
-			$this->connection,
-			$this->systemConfig,
-			$this->logger,
+			$this->builder->getConnection()->getQueryBuilder(),
 			$this->shardDefinitions,
 			$this->shardConnectionManager,
 		);
