@@ -11,6 +11,9 @@ namespace OC\DB\QueryBuilder\Sharded;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
 
+/**
+ * Utility methods for implementing logic that moves data across shards
+ */
 class CrossShardMoveHelper {
 	public function __construct(
 		private ShardConnectionManager $connectionManager

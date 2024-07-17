@@ -23,17 +23,13 @@ declare(strict_types=1);
 
 namespace OC\DB\QueryBuilder\Partitioned;
 
-use OC\DB\ConnectionAdapter;
 use OC\DB\QueryBuilder\CompositeExpression;
-use OC\DB\QueryBuilder\ExtendedQueryBuilder;
 use OC\DB\QueryBuilder\QuoteHelper;
 use OC\DB\QueryBuilder\Sharded\ShardConnectionManager;
 use OC\DB\QueryBuilder\Sharded\ShardedQueryBuilder;
-use OC\SystemConfig;
 use OCP\DB\IResult;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
-use Psr\Log\LoggerInterface;
 
 class PartitionedQueryBuilder extends ShardedQueryBuilder {
 	/** @var array<string, PartitionQuery> $splitQueries */
@@ -71,8 +67,8 @@ class PartitionedQueryBuilder extends ShardedQueryBuilder {
 		return $this;
 	}
 
-	public function addSelect(...$selects) {
-		$selects = array_map(function($select) {
+	public function addSelect(...$select) {
+		$select = array_map(function ($select) {
 			return ['select' => $select, 'alias' => null];
 		}, $select);
 		$this->selects = array_merge($this->selects, $select);
@@ -247,7 +243,7 @@ class PartitionedQueryBuilder extends ShardedQueryBuilder {
 
 		$partitionPredicates = [];
 		foreach ($predicates as $predicate) {
-			$partition = $this->getPartitionForPredicate((string) $predicate);
+			$partition = $this->getPartitionForPredicate((string)$predicate);
 			if ($this->mainPartition === $partition) {
 				$partitionPredicates[''][] = $predicate;
 			} elseif ($partition) {

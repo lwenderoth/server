@@ -13,6 +13,9 @@ use OC\DB\ConnectionFactory;
 use OC\SystemConfig;
 use OCP\IDBConnection;
 
+/**
+ * Keeps track of the db connections to the various shards
+ */
 class ShardConnectionManager {
 	/** @var array<string, IDBConnection> */
 	private array $connections = [];

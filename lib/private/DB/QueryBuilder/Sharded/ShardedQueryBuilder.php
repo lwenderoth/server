@@ -12,8 +12,6 @@ use OC\DB\ConnectionAdapter;
 use OC\DB\QueryBuilder\CompositeExpression;
 use OC\DB\QueryBuilder\ExtendedQueryBuilder;
 use OC\DB\QueryBuilder\Parameter;
-use OC\DB\QueryBuilder\QueryBuilder;
-use OC\DB\ArrayResult;
 use OC\SystemConfig;
 use OCP\DB\IResult;
 use OCP\DB\QueryBuilder\IQueryBuilder;
@@ -294,7 +292,7 @@ class ShardedQueryBuilder extends ExtendedQueryBuilder {
 			if (empty($oldShardKeys)) {
 				throw new InvalidShardedQueryException("Can't update without shard key");
 			}
-			$oldShards = array_values(array_unique(array_map(function($shardKey) {
+			$oldShards = array_values(array_unique(array_map(function ($shardKey) {
 				return $this->shardDefinition->getShardForKey((int)$shardKey);
 			}, $oldShardKeys)));
 			$newShard = $this->shardDefinition->getShardForKey((int)$newShardKey);
@@ -304,40 +302,11 @@ class ShardedQueryBuilder extends ExtendedQueryBuilder {
 		}
 	}
 
-	/**
-	 * @return int[]
-	 */
-	private function getShards(): array {
-		if ($this->allShards) {
-			return $this->shardDefinition->getAllShards();
-		}
-		$shardKeys = $this->getShardKeys();
-		if (empty($shardKeys)) {
-			// todo: get shard keys from cache by primary keys
-			return $this->shardDefinition->getAllShards();
-		}
-		$shards = array_map(function ($shardKey) {
-			return $this->shardDefinition->getShardForKey((int)$shardKey);
-		}, $shardKeys);
-		return array_values(array_unique($shards));
-	}
-
 	public function executeQuery(?IDBConnection $connection = null): IResult {
 		$this->validate();
 		if ($this->shardDefinition) {
-			$shards = $this->getShards();
-			if (count($shards) === 1) {
-				return parent::executeQuery($this->shardConnectionManager->getConnection($this->shardDefinition, $shards[0]));
-			} else {
-				$results = [];
-				foreach ($shards as $shard) {
-					$shardConnection = $this->shardConnectionManager->getConnection($this->shardDefinition, $shard);
-					$subResult = parent::executeQuery($shardConnection);
-					$results = array_merge($results, $subResult->fetchAll());
-					$subResult->closeCursor();
-				}
-				return new ArrayResult($results);
-			}
+			$runner = new ShardQueryRunner($this->shardConnectionManager, $this->shardDefinition);
+			return $runner->executeQuery($this->builder, $this->allShards, $this->getShardKeys(), $this->getPrimaryKeys());
 		}
 		return parent::executeQuery($connection);
 	}
@@ -345,41 +314,47 @@ class ShardedQueryBuilder extends ExtendedQueryBuilder {
 	public function executeStatement(?IDBConnection $connection = null): int {
 		$this->validate();
 		if ($this->shardDefinition) {
-			$shards = $this->getShards();
-			$count = 0;
-			foreach ($shards as $shard) {
-				$shardConnection = $this->shardConnectionManager->getConnection($this->shardDefinition, $shard);
-				if (!$this->primaryKeys && $this->shardDefinition->table === $this->insertTable) {
-					// todo: is random primary key fine, or do we need to do shared-autoincrement
-					/**
-					 * atomic autoincrement:
-					 *
-					 * $next = $cache->inc('..');
-					 * if (!$next) {
-					 *     $last = $this->getMaxValue();
-					 *	   $success = $cache->add('..', $last + 1);
-					 *	   if ($success) {
-					 *	       return $last + 1;
-					 *	   } else {
-					 * 		   / somebody else set it
-					 *	       return $cache->inc('..');
-					 *	   }
-					 * } else {
-					 *     return $next
-					 * }
-					 */
-					$id = random_int(0, PHP_INT_MAX);
-					parent::setValue($this->shardDefinition->primaryKey, $this->createParameter('__generated_primary_key'));
-					$this->setParameter('__generated_primary_key', $id, self::PARAM_INT);
-					$this->lastInsertId = $id;
+			$runner = new ShardQueryRunner($this->shardConnectionManager, $this->shardDefinition);
+			if ($this->insertTable) {
+				$shards = $runner->getShards($this->allShards, $this->getShardKeys());
+				if (!$shards) {
+					throw new InvalidShardedQueryException("Can't insert without shard key");
 				}
-				$count += parent::executeStatement($shardConnection);
+				$count = 0;
+				foreach ($shards as $shard) {
+					$shardConnection = $this->shardConnectionManager->getConnection($this->shardDefinition, $shard);
+					if (!$this->primaryKeys && $this->shardDefinition->table === $this->insertTable) {
+						// todo: is random primary key fine, or do we need to do shared-autoincrement
+						/**
+						 * atomic autoincrement:
+						 *
+						 * $next = $cache->inc('..');
+						 * if (!$next) {
+						 *     $last = $this->getMaxValue();
+						 *       $success = $cache->add('..', $last + 1);
+						 *       if ($success) {
+						 *           return $last + 1;
+						 *       } else {
+						 *           / somebody else set it
+						 *           return $cache->inc('..');
+						 *       }
+						 * } else {
+						 *     return $next
+						 * }
+						 */
+						$id = random_int(0, PHP_INT_MAX);
+						parent::setValue($this->shardDefinition->primaryKey, $this->createParameter('__generated_primary_key'));
+						$this->setParameter('__generated_primary_key', $id, self::PARAM_INT);
+						$this->lastInsertId = $id;
+					}
+					$count += parent::executeStatement($shardConnection);
 
-				if ($this->insertTable) {
 					$this->lastInsertConnection = $shardConnection;
 				}
+				return $count;
+			} else {
+				return $runner->executeStatement($this->builder, $this->allShards, $this->getShardKeys(), $this->getPrimaryKeys());
 			}
-			return $count;
 		}
 		return parent::executeStatement($connection);
 	}

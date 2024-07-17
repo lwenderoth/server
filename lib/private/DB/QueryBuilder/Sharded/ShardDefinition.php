@@ -8,9 +8,11 @@ declare(strict_types=1);
 
 namespace OC\DB\QueryBuilder\Sharded;
 
-use OC\Config;
 use OCP\DB\QueryBuilder\Sharded\IShardMapper;
 
+/**
+ * Keeps the configuration for a shard setup
+ */
 class ShardDefinition {
 	/**
 	 * @param string $table

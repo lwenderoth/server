@@ -23,11 +23,10 @@ use Doctrine\DBAL\Platforms\SqlitePlatform;
 use Doctrine\DBAL\Result;
 use Doctrine\DBAL\Schema\Schema;
 use Doctrine\DBAL\Statement;
-use OC\DB\QueryBuilder\Partitioned\PartitionSplit;
 use OC\DB\QueryBuilder\Partitioned\PartitionedQueryBuilder;
+use OC\DB\QueryBuilder\Partitioned\PartitionSplit;
 use OC\DB\QueryBuilder\QueryBuilder;
 use OC\DB\QueryBuilder\Sharded\CrossShardMoveHelper;
-use OC\DB\QueryBuilder\Sharded\HashShardMapper;
 use OC\DB\QueryBuilder\Sharded\RoundRobinShardMapper;
 use OC\DB\QueryBuilder\Sharded\ShardConnectionManager;
 use OC\DB\QueryBuilder\Sharded\ShardDefinition;
@@ -133,7 +132,7 @@ class Connection extends PrimaryReadReplicaConnection {
 		}
 
 		// todo: only allow specific, pre-defined shard configurations, the current config exists for easy testing setup
-		$this->shards = array_map(function(array $config) {
+		$this->shards = array_map(function (array $config) {
 			$shardMapperClass = $config['mapper'] ?? RoundRobinShardMapper::class;
 			$shardMapper = Server::get($shardMapperClass);
 			if (!$shardMapper instanceof IShardMapper) {
@@ -149,7 +148,7 @@ class Connection extends PrimaryReadReplicaConnection {
 				$config['shards']
 			);
 		}, $this->params['sharding']);
-		$this->partitions = array_map(function(ShardDefinition $shard) {
+		$this->partitions = array_map(function (ShardDefinition $shard) {
 			return array_merge([$shard->table], $shard->companionTables);
 		}, $this->shards);
 
