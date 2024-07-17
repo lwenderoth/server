@@ -127,6 +127,8 @@ class ComposerStaticInitDAV
         'OCA\\DAV\\CalDAV\\Trashbin\\Plugin' => __DIR__ . '/..' . '/../lib/CalDAV/Trashbin/Plugin.php',
         'OCA\\DAV\\CalDAV\\Trashbin\\RestoreTarget' => __DIR__ . '/..' . '/../lib/CalDAV/Trashbin/RestoreTarget.php',
         'OCA\\DAV\\CalDAV\\Trashbin\\TrashbinHome' => __DIR__ . '/..' . '/../lib/CalDAV/Trashbin/TrashbinHome.php',
+        'OCA\\DAV\\CalDAV\\UpcomingEvent' => __DIR__ . '/..' . '/../lib/CalDAV/UpcomingEvent.php',
+        'OCA\\DAV\\CalDAV\\UpcomingEventsService' => __DIR__ . '/..' . '/../lib/CalDAV/UpcomingEventsService.php',
         'OCA\\DAV\\CalDAV\\Validation\\CalDavValidatePlugin' => __DIR__ . '/..' . '/../lib/CalDAV/Validation/CalDavValidatePlugin.php',
         'OCA\\DAV\\CalDAV\\WebcalCaching\\Plugin' => __DIR__ . '/..' . '/../lib/CalDAV/WebcalCaching/Plugin.php',
         'OCA\\DAV\\CalDAV\\WebcalCaching\\RefreshWebcalService' => __DIR__ . '/..' . '/../lib/CalDAV/WebcalCaching/RefreshWebcalService.php',

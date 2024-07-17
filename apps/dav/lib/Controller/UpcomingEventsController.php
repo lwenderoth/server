@@ -10,35 +10,29 @@ declare(strict_types=1);
 namespace OCA\DAV\Controller;
 
 use OCA\DAV\AppInfo\Application;
+use OCA\DAV\CalDAV\UpcomingEventsService;
 use OCA\DAV\ResponseDefinitions;
-use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\DataResponse;
 use OCP\AppFramework\OCSController;
-use OCP\AppFramework\Utility\ITimeFactory;
-use OCP\Calendar\IManager;
 use OCP\IRequest;
-use function array_map;
 
 /**
  * @psalm-import-type DAVUpcomingEvent from ResponseDefinitions
  */
 class UpcomingEventsController extends OCSController {
-	private IManager $calendarManager;
 	private ?string $userId;
-	private ITimeFactory $timeFactory;
+	private UpcomingEventsService $service;
 
 	public function __construct(
 		IRequest $request,
 		?string $userId,
-		IManager $calendarManager,
-		ITimeFactory $timeFactory) {
+		UpcomingEventsService $service) {
 		parent::__construct(Application::APP_ID, $request);
 
 		$this->userId = $userId;
-		$this->calendarManager = $calendarManager;
-		$this->timeFactory = $timeFactory;
+		$this->service = $service;
 	}
 
 	/**
@@ -47,7 +41,7 @@ class UpcomingEventsController extends OCSController {
 	 * @param string|null $location location/URL to filter by
 	 * @return DataResponse<Http::STATUS_OK, array{events: DAVUpcomingEvent[]}, array{}>|DataResponse<Http::STATUS_UNAUTHORIZED, null, array{}>
 	 *
-	 * 200: Bla
+	 * 200: Upcoming events
 	 * 401: When not authenticated
 	 */
 	#[NoAdminRequired]
@@ -56,30 +50,11 @@ class UpcomingEventsController extends OCSController {
 			return new DataResponse(null, Http::STATUS_UNAUTHORIZED);
 		}
 
-		// TODO: move logic into a service class
-		$searchQuery = $this->calendarManager->newQuery('principals/users/' . $this->userId);
-		if ($location !== null) {
-			$searchQuery->addSearchProperty('LOCATION');
-			$searchQuery->setSearchPattern($location);
-		}
-		$searchQuery->addType('VEVENT');
-		$searchQuery->setLimit(5);
-		$now = $this->timeFactory->now();
-		$searchQuery->setTimerangeStart($now->modify('-1 minute'));
-		$searchQuery->setTimerangeEnd($now->modify('+7 days'));
-
-		$events = $this->calendarManager->searchForPrincipal($searchQuery);
-
 		return new DataResponse([
-			'events' => array_map(function ($event) {
-				return [
-					'uri' => $event['uri'],
-					'calendarId' => (int) $event['calendar-key'],
-					'start' => $event['objects'][0]['DTSTART'][0]?->getTimestamp(),
-					'summary' => $event['objects'][0]['SUMMARY'][0] ?? null,
-					'location' => $event['objects'][0]['LOCATION'][0] ?? null,
-				];
-			}, $events),
+			'events' => $this->service->getEvents(
+				$this->userId,
+				$location,
+			),
 		]);
 	}
 

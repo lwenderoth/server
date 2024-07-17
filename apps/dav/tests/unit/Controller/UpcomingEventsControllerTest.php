@@ -5,9 +5,10 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 
-namespace OCA\DAV\Tests\Unit\DAV\Controller;
+namespace OCA\DAV\Tests\Unit\DAV\Service;
 
 use DateTimeImmutable;
+use OCA\DAV\CalDAV\UpcomingEventsService;
 use OCA\DAV\Controller\UpcomingEventsController;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Calendar\ICalendarQuery;
@@ -19,26 +20,23 @@ use PHPUnit\Framework\TestCase;
 class UpcomingEventsControllerTest extends TestCase {
 
 	private IRequest|MockObject $request;
-	private MockObject|IManager $calendarManager;
-	private ITimeFactory|MockObject $timeFactory;
+	private UpcomingEventsService|MockObject $service;
 
 	protected function setUp(): void {
 		parent::setUp();
 
 		$this->request = $this->createMock(IRequest::class);
-		$this->calendarManager = $this->createMock(IManager::class);
-		$this->timeFactory = $this->createMock(ITimeFactory::class);
+		$this->service = $this->createMock(UpcomingEventsService::class);
 	}
 
 	public function testGetEventsAnonymously() {
-		$this->controller = new UpcomingEventsController(
+		$controller = new UpcomingEventsController(
 			$this->request,
 			null,
-			$this->calendarManager,
-			$this->timeFactory,
+			$this->service,
 		);
 
-		$response = $this->controller->getEvents('https://cloud.example.com/call/123');
+		$response = $controller->getEvents('https://cloud.example.com/call/123');
 
 		self::assertNull($response->getData());
 		self::assertSame(401, $response->getStatus());
@@ -74,14 +72,14 @@ class UpcomingEventsControllerTest extends TestCase {
 					],
 				],
 			]);
-		$this->controller = new UpcomingEventsController(
+		$controller = new UpcomingEventsController(
 			$this->request,
 			'u1',
 			$this->calendarManager,
 			$this->timeFactory,
 		);
 
-		$response = $this->controller->getEvents('https://cloud.example.com/call/123');
+		$response = $controller->getEvents('https://cloud.example.com/call/123');
 
 		self::assertNotNull($response->getData());
 		self::assertIsArray($response->getData());
