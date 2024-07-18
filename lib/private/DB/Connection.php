@@ -88,6 +88,21 @@ class Connection extends PrimaryReadReplicaConnection {
 	protected array $shards = [];
 	protected ShardConnectionManager $shardConnectionManager;
 
+	const SHARD_PRESETS = [
+		'filecache' => [
+			'companion_keys' => [
+				'file_id',
+			],
+			'companion_tables' => [
+				'filecache_extended',
+				'files_metadata',
+			],
+			'primary_key' => 'fileid',
+			'shard_key' => 'storage',
+			'table' => 'filecache',
+		],
+	];
+
 	/**
 	 * Initializes a new instance of the Connection class.
 	 *
@@ -131,23 +146,28 @@ class Connection extends PrimaryReadReplicaConnection {
 			$this->_config->setSQLLogger($debugStack);
 		}
 
-		// todo: only allow specific, pre-defined shard configurations, the current config exists for easy testing setup
-		$this->shards = array_map(function (array $config) {
+		$shardNames = array_keys($this->params['sharding'] ?? []);
+		$this->shards = array_map(function (array $config, string $name) {
+			if (!isset(self::SHARD_PRESETS[$name])) {
+				throw new \Exception("Shard preset $name not found");
+			}
+
 			$shardMapperClass = $config['mapper'] ?? RoundRobinShardMapper::class;
 			$shardMapper = Server::get($shardMapperClass);
 			if (!$shardMapper instanceof IShardMapper) {
 				throw new \Exception("Invalid shard mapper: $shardMapperClass");
 			}
 			return new ShardDefinition(
-				$config['table'],
-				$config['primary_key'],
-				$config['companion_keys'],
-				$config['shard_key'],
+				self::SHARD_PRESETS[$name]['table'],
+				self::SHARD_PRESETS[$name]['primary_key'],
+				self::SHARD_PRESETS[$name]['companion_keys'],
+				self::SHARD_PRESETS[$name]['shard_key'],
 				$shardMapper,
-				$config['companion_tables'],
+				self::SHARD_PRESETS[$name]['companion_tables'],
 				$config['shards']
 			);
-		}, $this->params['sharding']);
+		}, $this->params['sharding'] ?? [], $shardNames);
+		$this->shards = array_combine($shardNames, $this->shards);
 		$this->partitions = array_map(function (ShardDefinition $shard) {
 			return array_merge([$shard->table], $shard->companionTables);
 		}, $this->shards);
