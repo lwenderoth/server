@@ -158,7 +158,36 @@ class Plugin extends \Sabre\CalDAV\Schedule\Plugin {
 		}
 
 		try {
-			parent::calendarObjectChange($request, $response, $vCal, $calendarPath, $modified, $isNew);
+
+			if (!$this->scheduleReply($this->server->httpRequest)) {
+				return;
+			}
+	
+			$calendarNode = $this->server->tree->getNodeForPath($calendarPath);
+
+			$addresses = $this->getAddressesForPrincipal($calendarNode->getOwner());
+			// determain if this is a shared calendar
+			if ($calendarNode->isShared()) {
+				$addresses = array_merge(
+					$addresses,
+					$this->getAddressesForPrincipal($calendarNode->getPrincipalURI())
+				);
+			}
+	
+			if (!$isNew) {
+				$node = $this->server->tree->getNodeForPath($request->getPath());
+				$oldObj = Reader::read($node->get());
+			} else {
+				$oldObj = null;
+			}
+	
+			$this->processICalendarChange($oldObj, $vCal, $addresses, [], $modified);
+	
+			if ($oldObj) {
+				// Destroy circular references so PHP will GC the object.
+				$oldObj->destroy();
+			}
+			
 		} catch (SameOrganizerForAllComponentsException $e) {
 			$this->handleSameOrganizerException($e, $vCal, $calendarPath);
 		}

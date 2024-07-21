@@ -206,6 +206,9 @@ class Calendar extends \Sabre\CalDAV\Calendar implements IRestorable, IShareable
 	}
 
 	public function getOwner(): ?string {
+		if (isset($this->calendarInfo['{http://owncloud.org/ns}owner-principal'])) {
+			return $this->calendarInfo['{http://owncloud.org/ns}owner-principal'];
+		}
 		return parent::getOwner();
 	}
 
