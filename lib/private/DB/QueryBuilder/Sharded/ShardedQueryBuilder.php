@@ -34,6 +34,7 @@ class ShardedQueryBuilder extends ExtendedQueryBuilder {
 	private mixed $lastInsertId = null;
 	private ?IDBConnection $lastInsertConnection = null;
 	private ?int $updateShardKey = null;
+	private array $outputColumns = [];
 
 	/**
 	 * @param ConnectionAdapter $connection
@@ -82,6 +83,40 @@ class ShardedQueryBuilder extends ExtendedQueryBuilder {
 			return [];
 		}
 	}
+
+	public function select(...$selects) {
+		$this->addOutputColumns($selects);
+		return parent::select(...$selects);
+	}
+
+	public function selectAlias($select, $alias) {
+		$this->addOutputColumns([$alias]);
+		return parent::selectAlias($select, $alias);
+	}
+
+	public function selectDistinct($select) {
+		$this->addOutputColumns([$select]);
+		return parent::selectDistinct($select);
+	}
+
+	public function addSelect(...$select) {
+		$this->addOutputColumns($select);
+		return parent::addSelect(...$select);
+	}
+
+	private function addOutputColumns(array $columns) {
+		foreach ($columns as $column) {
+			if (is_array($column)) {
+				$this->addOutputColumns($column);
+			} elseif (is_string($column) && !str_contains($column, '*')) {
+				if (str_contains($column, '.')) {
+					[, $column] = explode('.', $column);
+				}
+				$this->outputColumns[] = $column;
+			}
+		}
+	}
+
 
 	public function where(...$predicates) {
 		return $this->andWhere(...$predicates);
@@ -371,5 +406,14 @@ class ShardedQueryBuilder extends ExtendedQueryBuilder {
 		}
 	}
 
-
+	public function getOutputColumns(): array {
+		return array_unique(array_map(function(string $column) {
+			if (str_contains($column, '.')) {
+				[, $column] = explode('.', $column);
+				return $column;
+			} else {
+				return $column;
+			}
+		}, $this->outputColumns));
+	}
 }

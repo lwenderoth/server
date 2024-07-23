@@ -23,6 +23,7 @@ declare(strict_types=1);
 
 namespace OC\DB\QueryBuilder\Partitioned;
 
+use OC\DB\QueryBuilder\Sharded\ShardedQueryBuilder;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 
 class PartitionQuery {
@@ -34,7 +35,7 @@ class PartitionQuery {
 	public const JOIN_MODE_RIGHT = 'right';
 
 	public function __construct(
-		public IQueryBuilder $query,
+		public ShardedQueryBuilder $query,
 		public string $joinFromColumn,
 		public string $joinToColumn,
 		public string $joinMode,
@@ -55,7 +56,13 @@ class PartitionQuery {
 		$joinFromValues = array_map(function (array $row) use ($joinFromColumn) {
 			return $row[$joinFromColumn];
 		}, $rows);
+		$joinFromValues = array_filter($joinFromValues, function($value) {
+			return $value !== null;
+		});
 		$this->query->andWhere($this->query->expr()->in($this->joinToColumn, $this->query->createNamedParameter($joinFromValues, IQueryBuilder::PARAM_STR_ARRAY, ':' . uniqid())));
+
+		$columns = $this->query->getOutputColumns();
+		$nullResult = array_combine($this->query->getOutputColumns(), array_fill(0, count($columns), null));
 
 		$s = $this->query->getSQL();
 		$partitionedRows = $this->query->executeQuery()->fetchAll();
@@ -70,7 +77,7 @@ class PartitionQuery {
 					$result[] = array_merge($row, $partitionedRowsByKey[$row[$joinFromColumn]]);
 				}
 			} elseif ($this->joinMode === self::JOIN_MODE_LEFT || $this->joinMode === self::JOIN_MODE_LEFT_NULL) {
-				$result[] = $row;
+				$result[] = array_merge($nullResult, $row);
 			}
 		}
 		return $result;
