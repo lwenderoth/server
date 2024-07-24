@@ -1015,7 +1015,7 @@ class CalDavBackend extends AbstractBackend implements SyncSupport, Subscription
 	}
 
 	/**
-	 * Returns all calendar objects within a calendar.
+	 * Returns all calendar objects with limited data for a calendar
 	 *
 	 * Every item contains an array with the following keys:
 	 *   * calendardata - The iCalendar-compatible calendar data
@@ -1023,30 +1023,14 @@ class CalDavBackend extends AbstractBackend implements SyncSupport, Subscription
 	 *     be any arbitrary string, but making sure it ends with '.ics' is a
 	 *     good idea. This is only the basename, or filename, not the full
 	 *     path.
-	 *   * lastmodified - a timestamp of the last modification time
-	 *   * etag - An arbitrary string, surrounded by double-quotes. (e.g.:
-	 *   '"abcdef"')
-	 *   * size - The size of the calendar objects, in bytes.
-	 *   * component - optional, a string containing the type of object, such
-	 *     as 'vevent' or 'vtodo'. If specified, this will be used to populate
-	 *     the Content-Type header.
-	 *
-	 * Note that the etag is optional, but it's highly encouraged to return for
-	 * speed reasons.
-	 *
-	 * The calendardata is also optional. If it's not returned
-	 * 'getCalendarObject' will be called later, which *is* expected to return
-	 * calendardata.
-	 *
-	 * If neither etag or size are specified, the calendardata will be
-	 * used/fetched to determine these numbers. If both are specified the
-	 * amount of times this is needed is reduced by a great degree.
+	 *   * etag - An arbitrary string
+	 *   * id - the table row id
 	 *
 	 * @param mixed $calendarId
 	 * @param int $calendarType
-	 * @return array<int, array<int, int, string>>
+	 * @return array
 	 */
-	public function getLimitedCalendarObjects($calendarId, $calendarType = self::CALENDAR_TYPE_CALENDAR):array {
+	public function getLimitedCalendarObjects(int $calendarId, int $calendarType = self::CALENDAR_TYPE_CALENDAR):array {
 		$query = $this->db->getQueryBuilder();
 		$query->select(['id','uid', 'etag', 'uri', 'calendardata'])
 			->from('calendarobjects')

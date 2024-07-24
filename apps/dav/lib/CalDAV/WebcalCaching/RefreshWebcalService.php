@@ -92,6 +92,7 @@ class RefreshWebcalService {
 			while ($vObject = $splitter->getNext()) {
 				/** @var Component $vObject */
 				$compName = null;
+				$uid = null;
 
 				foreach ($vObject->getComponents() as $component) {
 					if ($component->name === 'VTIMEZONE') {
@@ -114,6 +115,10 @@ class RefreshWebcalService {
 					continue;
 				}
 
+				if ($uid === null) {
+					continue;
+				}
+
 				$denormalized = $this->calDavBackend->getDenormalizedData($vObject->serialize());
 				// Find all identical sets and remove them from the update
 				if (isset($localData[$uid]) && $denormalized['etag'] === $localData[$uid]['etag']) {
@@ -122,7 +127,7 @@ class RefreshWebcalService {
 				}
 
 				$identical = $this->compareWithoutDtstamp($vObject, $localData[$uid]);
-				if($identical) {
+				if ($identical) {
 					unset($localData[$uid]);
 					continue;
 				}
@@ -143,10 +148,10 @@ class RefreshWebcalService {
 				}
 			}
 
-			$ids = array_map(function ($dataSet) {
+			$ids = array_map(static function ($dataSet): int {
 				return $dataSet['id'];
 			}, $localData);
-			$uris = array_map(function ($dataSet) {
+			$uris = array_map(static function ($dataSet): string {
 				return $dataSet['uri'];
 			}, $localData);
 
