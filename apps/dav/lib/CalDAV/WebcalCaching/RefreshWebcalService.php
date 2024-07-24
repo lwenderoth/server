@@ -61,9 +61,6 @@ class RefreshWebcalService {
 
 	public function refreshSubscription(string $principalUri, string $uri) {
 		$subscription = $this->getSubscription($principalUri, $uri);
-		if($subscription['id'] !== 26) {
-			return;
-		}
 		$mutations = [];
 		if (!$subscription) {
 			return;
