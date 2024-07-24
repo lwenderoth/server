@@ -12,6 +12,7 @@ use Exception;
 use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Middleware;
 use OCA\DAV\CalDAV\CalDavBackend;
+use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\LocalServerException;
 use OCP\IConfig;
@@ -47,7 +48,11 @@ class RefreshWebcalService {
 	public const STRIP_ATTACHMENTS = '{http://calendarserver.org/ns/}subscribed-strip-attachments';
 	public const STRIP_TODOS = '{http://calendarserver.org/ns/}subscribed-strip-todos';
 
-	public function __construct(CalDavBackend $calDavBackend, IClientService $clientService, IConfig $config, LoggerInterface $logger) {
+	public function __construct(CalDavBackend $calDavBackend,
+		IClientService $clientService,
+		IConfig $config,
+		LoggerInterface $logger,
+		private ITimeFactory $time) {
 		$this->calDavBackend = $calDavBackend;
 		$this->clientService = $clientService;
 		$this->config = $config;
@@ -56,9 +61,21 @@ class RefreshWebcalService {
 
 	public function refreshSubscription(string $principalUri, string $uri) {
 		$subscription = $this->getSubscription($principalUri, $uri);
+		if($subscription['id'] !== 26) {
+			return;
+		}
 		$mutations = [];
 		if (!$subscription) {
 			return;
+		}
+
+		// Check the refresh rate if there is any
+		if(!empty($subscription['{http://apple.com/ns/ical/}refreshrate'])) {
+			// add the refresh interval to the lastmodified timestamp
+			$updateTime = (new \DateTime($subscription['lastmodified']))->add($subscription['{http://apple.com/ns/ical/}refreshrate']);
+			if($updateTime->getTimestamp() > $this->time->getTime()) {
+				return;
+			}
 		}
 
 		$webcalData = $this->queryWebcalFeed($subscription, $mutations);
@@ -66,17 +83,14 @@ class RefreshWebcalService {
 			return;
 		}
 
+		$localData = $this->calDavBackend->getCalendarObjectEtagAndUri($subscription['id'], CalDavBackend::CALENDAR_TYPE_SUBSCRIPTION);
+
 		$stripTodos = ($subscription[self::STRIP_TODOS] ?? 1) === 1;
 		$stripAlarms = ($subscription[self::STRIP_ALARMS] ?? 1) === 1;
 		$stripAttachments = ($subscription[self::STRIP_ATTACHMENTS] ?? 1) === 1;
 
 		try {
 			$splitter = new ICalendar($webcalData, Reader::OPTION_FORGIVING);
-
-			// we wait with deleting all outdated events till we parsed the new ones
-			// in case the new calendar is broken and `new ICalendar` throws a ParseException
-			// the user will still see the old data
-			$this->calDavBackend->purgeAllCachedEventsForSubscription($subscription['id']);
 
 			while ($vObject = $splitter->getNext()) {
 				/** @var Component $vObject */
@@ -95,21 +109,48 @@ class RefreshWebcalService {
 					if ($stripAttachments) {
 						unset($component->{'ATTACH'});
 					}
+
+					$uid = $component->{ 'UID' }->getValue();
 				}
 
 				if ($stripTodos && $compName === 'VTODO') {
 					continue;
 				}
 
-				$objectUri = $this->getRandomCalendarObjectUri();
-				$calendarData = $vObject->serialize();
+				$denormalized = $this->calDavBackend->getDenormalizedData($vObject->serialize());
+				// Find all identical sets and remove them from the update
+				if (isset($localData[$uid]) && $denormalized['etag'] === $localData[$uid]['etag']) {
+					unset($localData[$uid]);
+					continue;
+				}
+
+				// Find all modified sets and update them
+				if (isset($localData[$uid]) && $denormalized['etag'] !== $localData[$uid]['etag']) {
+					$this->calDavBackend->updateCalendarObject($subscription['id'], $localData[$uid]['uri'], $vObject->serialize(), CalDavBackend::CALENDAR_TYPE_SUBSCRIPTION);
+					unset($localData[$uid]);
+					continue;
+				}
+
+				// Only entirely new events get created here
 				try {
-					$this->calDavBackend->createCalendarObject($subscription['id'], $objectUri, $calendarData, CalDavBackend::CALENDAR_TYPE_SUBSCRIPTION);
+					$objectUri = $this->getRandomCalendarObjectUri();
+					$this->calDavBackend->createCalendarObject($subscription['id'], $vObject->serialize(), $objectUri,  CalDavBackend::CALENDAR_TYPE_SUBSCRIPTION);
 				} catch (NoInstancesException | BadRequest $ex) {
 					$this->logger->error('Unable to create calendar object from subscription {subscriptionId}', ['exception' => $ex, 'subscriptionId' => $subscription['id'], 'source' => $subscription['source']]);
 				}
 			}
 
+			$ids = array_map(function ($dataSet) {
+				return $dataSet['id'];
+			}, $localData);
+			$uris = array_map(function ($dataSet) {
+				return $dataSet['uri'];
+			}, $localData);
+
+			// Clean up on aisle 5
+			// The only events left over in the $localData array should be those that don't exist upstream
+			// All eleted VObjects from upstream are removed
+			$this->calDavBackend->purgeCachedEventsForSubscription($subscription['id'], $ids, $uris);
 			$newRefreshRate = $this->checkWebcalDataForRefreshRate($subscription, $webcalData);
 			if ($newRefreshRate) {
 				$mutations[self::REFRESH_RATE] = $newRefreshRate;
