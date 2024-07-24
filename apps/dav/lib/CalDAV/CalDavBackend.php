@@ -1046,9 +1046,9 @@ class CalDavBackend extends AbstractBackend implements SyncSupport, Subscription
 	 * @param int $calendarType
 	 * @return array<int, array<int, int, string>>
 	 */
-	public function getCalendarObjectEtagAndUri($calendarId, $calendarType = self::CALENDAR_TYPE_CALENDAR):array {
+	public function getLimitedCalendarObjects($calendarId, $calendarType = self::CALENDAR_TYPE_CALENDAR):array {
 		$query = $this->db->getQueryBuilder();
-		$query->select(['id','uid', 'etag', 'uri'])
+		$query->select(['id','uid', 'etag', 'uri', 'calendardata'])
 			->from('calendarobjects')
 			->where($query->expr()->eq('calendarid', $query->createNamedParameter($calendarId)))
 			->andWhere($query->expr()->eq('calendartype', $query->createNamedParameter($calendarType)))
@@ -1061,6 +1061,7 @@ class CalDavBackend extends AbstractBackend implements SyncSupport, Subscription
 				'id' => $row['id'],
 				'etag' => $row['etag'],
 				'uri' => $row['uri'],
+				'calendardata' => $row['calendardata'],
 			];
 		}
 		$stmt->closeCursor();

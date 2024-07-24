@@ -80,7 +80,7 @@ class RefreshWebcalService {
 			return;
 		}
 
-		$localData = $this->calDavBackend->getCalendarObjectEtagAndUri($subscription['id'], CalDavBackend::CALENDAR_TYPE_SUBSCRIPTION);
+		$localData = $this->calDavBackend->getLimitedCalendarObjects($subscription['id'], CalDavBackend::CALENDAR_TYPE_SUBSCRIPTION);
 
 		$stripTodos = ($subscription[self::STRIP_TODOS] ?? 1) === 1;
 		$stripAlarms = ($subscription[self::STRIP_ALARMS] ?? 1) === 1;
@@ -117,6 +117,12 @@ class RefreshWebcalService {
 				$denormalized = $this->calDavBackend->getDenormalizedData($vObject->serialize());
 				// Find all identical sets and remove them from the update
 				if (isset($localData[$uid]) && $denormalized['etag'] === $localData[$uid]['etag']) {
+					unset($localData[$uid]);
+					continue;
+				}
+
+				$identical = $this->compareWithoutDtstamp($vObject, $localData[$uid]);
+				if($identical) {
 					unset($localData[$uid]);
 					continue;
 				}
@@ -384,5 +390,18 @@ class RefreshWebcalService {
 	 */
 	public function getRandomCalendarObjectUri():string {
 		return UUIDUtil::getUUID() . '.ics';
+	}
+
+	private function compareWithoutDtstamp(Component $vObject, array $calendarObject): bool {
+		foreach ($vObject->getComponents() as $component) {
+			unset($component->{'DTSTAMP'});
+		}
+
+		$localVobject = Reader::read($calendarObject['calendardata']);
+		foreach ($localVobject->getComponents() as $component) {
+			unset($component->{'DTSTAMP'});
+		}
+
+		return md5($localVobject->serialize()) === md5($vObject->serialize());
 	}
 }
