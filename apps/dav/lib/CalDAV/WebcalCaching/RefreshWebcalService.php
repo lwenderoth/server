@@ -115,7 +115,7 @@ class RefreshWebcalService {
 					continue;
 				}
 
-				if ($uid === null) {
+				if (!isset($uid)) {
 					continue;
 				}
 
