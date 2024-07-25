@@ -68,13 +68,15 @@ class PartitionQuery {
 		$partitionedRows = $this->query->executeQuery()->fetchAll();
 		$partitionedRowsByKey = [];
 		foreach ($partitionedRows as $partitionedRow) {
-			$partitionedRowsByKey[$partitionedRow[$joinToColumn]] = $partitionedRow;
+			$partitionedRowsByKey[$partitionedRow[$joinToColumn]][] = $partitionedRow;
 		}
 		$result = [];
 		foreach ($rows as $row) {
 			if (isset($partitionedRowsByKey[$row[$joinFromColumn]])) {
 				if ($this->joinMode !== self::JOIN_MODE_LEFT_NULL) {
-					$result[] = array_merge($row, $partitionedRowsByKey[$row[$joinFromColumn]]);
+					foreach ($partitionedRowsByKey[$row[$joinFromColumn]] as $partitionedRow) {
+						$result[] = array_merge($row, $partitionedRow);
+					}
 				}
 			} elseif ($this->joinMode === self::JOIN_MODE_LEFT || $this->joinMode === self::JOIN_MODE_LEFT_NULL) {
 				$result[] = array_merge($nullResult, $row);
