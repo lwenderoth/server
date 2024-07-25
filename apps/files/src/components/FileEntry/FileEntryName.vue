@@ -37,15 +37,15 @@
 </template>
 
 <script lang="ts">
-import type { Node } from '@nextcloud/files'
+import type { FileAction, Node } from '@nextcloud/files'
 import type { PropType } from 'vue'
 
 import axios, { isAxiosError } from '@nextcloud/axios'
 import { showError, showSuccess } from '@nextcloud/dialogs'
 import { emit } from '@nextcloud/event-bus'
-import { FileType, NodeStatus, Permission } from '@nextcloud/files'
+import { FileType, NodeStatus } from '@nextcloud/files'
 import { translate as t } from '@nextcloud/l10n'
-import { defineComponent } from 'vue'
+import { defineComponent, inject } from 'vue'
 
 import NcTextField from '@nextcloud/vue/dist/Components/NcTextField.js'
 
@@ -98,8 +98,11 @@ export default defineComponent({
 		const { currentView } = useNavigation()
 		const renamingStore = useRenamingStore()
 
+		const defaultFileAction = inject<FileAction | undefined>('defaultFileAction')
+
 		return {
 			currentView,
+			defaultFileAction,
 
 			renamingStore,
 		}
@@ -139,10 +142,8 @@ export default defineComponent({
 				}
 			}
 
-			const enabledDefaultActions = this.$parent?.$refs?.actions?.enabledDefaultActions
-			if (enabledDefaultActions?.length > 0) {
-				const action = enabledDefaultActions[0]
-				const displayName = action.displayName([this.source], this.currentView)
+			if (this.defaultFileAction && this.currentView) {
+				const displayName = this.defaultFileAction.displayName([this.source], this.currentView)
 				return {
 					is: 'a',
 					params: {
@@ -153,18 +154,8 @@ export default defineComponent({
 				}
 			}
 
-			if (this.source?.permissions & Permission.READ) {
-				return {
-					is: 'a',
-					params: {
-						download: this.source.basename,
-						href: this.source.source,
-						title: t('files', 'Download file {name}', { name: `${this.basename}${this.extension}` }),
-						tabindex: '0',
-					},
-				}
-			}
-
+			// nothing interactive here, there is no default action
+			// so if not even the download action works we only can show the list entry
 			return {
 				is: 'span',
 			}
@@ -280,12 +271,15 @@ export default defineComponent({
 				// Reset the renaming store
 				this.stopRenaming()
 				this.$nextTick(() => {
-					this.$refs.basename?.focus()
+					const nameContainter = this.$refs.basename as HTMLElement | undefined
+					nameContainter?.focus()
 				})
 			} catch (error) {
 				logger.error('Error while renaming file', { error })
+				// Rename back as it failed
 				this.source.rename(oldName)
-				this.$refs.renameInput?.focus()
+				// And ensure we reset to the renaming state
+				this.startRenaming()
 
 				if (isAxiosError(error)) {
 					// TODO: 409 means current folder does not exist, redirect ?
