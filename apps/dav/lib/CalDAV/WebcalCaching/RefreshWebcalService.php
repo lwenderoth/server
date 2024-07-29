@@ -126,7 +126,8 @@ class RefreshWebcalService {
 					continue;
 				}
 
-				$identical = $this->compareWithoutDtstamp($vObject, $localData[$uid]);
+				$vObjectCopy = clone $vObject;
+				$identical = isset($localData[$uid]) && $this->compareWithoutDtstamp($vObjectCopy, $localData[$uid]);
 				if ($identical) {
 					unset($localData[$uid]);
 					continue;
@@ -142,23 +143,26 @@ class RefreshWebcalService {
 				// Only entirely new events get created here
 				try {
 					$objectUri = $this->getRandomCalendarObjectUri();
-					$this->calDavBackend->createCalendarObject($subscription['id'], $vObject->serialize(), $objectUri,  CalDavBackend::CALENDAR_TYPE_SUBSCRIPTION);
+					$this->calDavBackend->createCalendarObject($subscription['id'], $objectUri, $vObject->serialize(), CalDavBackend::CALENDAR_TYPE_SUBSCRIPTION);
 				} catch (NoInstancesException | BadRequest $ex) {
 					$this->logger->error('Unable to create calendar object from subscription {subscriptionId}', ['exception' => $ex, 'subscriptionId' => $subscription['id'], 'source' => $subscription['source']]);
 				}
 			}
 
 			$ids = array_map(static function ($dataSet): int {
-				return $dataSet['id'];
+				return (int) $dataSet['id'];
 			}, $localData);
 			$uris = array_map(static function ($dataSet): string {
 				return $dataSet['uri'];
 			}, $localData);
 
-			// Clean up on aisle 5
-			// The only events left over in the $localData array should be those that don't exist upstream
-			// All eleted VObjects from upstream are removed
-			$this->calDavBackend->purgeCachedEventsForSubscription($subscription['id'], $ids, $uris);
+			if(!empty($ids) && !empty($uris)) {
+				// Clean up on aisle 5
+				// The only events left over in the $localData array should be those that don't exist upstream
+				// All deleted VObjects from upstream are removed
+				$this->calDavBackend->purgeCachedEventsForSubscription($subscription['id'], $ids, $uris);
+			}
+
 			$newRefreshRate = $this->checkWebcalDataForRefreshRate($subscription, $webcalData);
 			if ($newRefreshRate) {
 				$mutations[self::REFRESH_RATE] = $newRefreshRate;

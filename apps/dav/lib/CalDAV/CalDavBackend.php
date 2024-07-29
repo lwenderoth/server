@@ -3327,20 +3327,24 @@ class CalDavBackend extends AbstractBackend implements SyncSupport, Subscription
 	 * @throws Exception
 	 */
 	public function purgeCachedEventsForSubscription(int $subscriptionId, array $calendarObjectIds, array $calendarObjectUris): void {
+		if(empty($calendarObjectUris)) {
+			return;
+		}
+
 		$this->atomic(function () use ($subscriptionId, $calendarObjectIds, $calendarObjectUris) {
 			foreach (array_chunk($calendarObjectIds, 1000) as $chunk) {
 				$query = $this->db->getQueryBuilder();
 				$query->delete($this->dbObjectPropertiesTable)
 					->where($query->expr()->eq('calendarid', $query->createNamedParameter($subscriptionId)))
 					->andWhere($query->expr()->eq('calendartype', $query->createNamedParameter(self::CALENDAR_TYPE_SUBSCRIPTION)))
-					->andWhere($query->expr()->in('id', $query->createNamedParameter($chunk), IQueryBuilder::PARAM_INT_ARRAY))
+					->andWhere($query->expr()->in('id', $query->createNamedParameter($chunk, IQueryBuilder::PARAM_INT_ARRAY), IQueryBuilder::PARAM_INT_ARRAY))
 					->executeStatement();
 
 				$query = $this->db->getQueryBuilder();
 				$query->delete('calendarobjects')
 					->where($query->expr()->eq('calendarid', $query->createNamedParameter($subscriptionId)))
 					->andWhere($query->expr()->eq('calendartype', $query->createNamedParameter(self::CALENDAR_TYPE_SUBSCRIPTION)))
-					->andWhere($query->expr()->in('id', $query->createNamedParameter($chunk), IQueryBuilder::PARAM_INT_ARRAY))
+					->andWhere($query->expr()->in('id', $query->createNamedParameter($chunk, IQueryBuilder::PARAM_INT_ARRAY), IQueryBuilder::PARAM_INT_ARRAY))
 					->executeStatement();
 			}
 
@@ -3349,7 +3353,7 @@ class CalDavBackend extends AbstractBackend implements SyncSupport, Subscription
 				$query->delete('calendarchanges')
 					->where($query->expr()->eq('calendarid', $query->createNamedParameter($subscriptionId)))
 					->andWhere($query->expr()->eq('calendartype', $query->createNamedParameter(self::CALENDAR_TYPE_SUBSCRIPTION)))
-					->andWhere($query->expr()->in('uri', $query->createNamedParameter($chunk), IQueryBuilder::PARAM_STR_ARRAY))
+					->andWhere($query->expr()->in('uri', $query->createNamedParameter($chunk, IQueryBuilder::PARAM_STR_ARRAY), IQueryBuilder::PARAM_STR_ARRAY))
 					->executeStatement();
 			}
 			$this->addChanges($subscriptionId, $calendarObjectUris, 3, self::CALENDAR_TYPE_SUBSCRIPTION);
