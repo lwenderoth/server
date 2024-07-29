@@ -69,7 +69,8 @@ class RefreshWebcalService {
 		// Check the refresh rate if there is any
 		if(!empty($subscription['{http://apple.com/ns/ical/}refreshrate'])) {
 			// add the refresh interval to the lastmodified timestamp
-			$updateTime = (new \DateTime($subscription['lastmodified']))->add($subscription['{http://apple.com/ns/ical/}refreshrate']);
+			$refreshInterval = new \DateInterval($subscription['{http://apple.com/ns/ical/}refreshrate']);
+			$updateTime = $this->time->getDateTime()->setTimestamp($subscription['lastmodified'])->add($refreshInterval);
 			if($updateTime->getTimestamp() > $this->time->getTime()) {
 				return;
 			}
