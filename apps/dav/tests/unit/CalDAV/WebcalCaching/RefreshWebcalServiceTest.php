@@ -8,6 +8,7 @@ namespace OCA\DAV\Tests\unit\CalDAV\WebcalCaching;
 use GuzzleHttp\HandlerStack;
 use OCA\DAV\CalDAV\CalDavBackend;
 use OCA\DAV\CalDAV\WebcalCaching\RefreshWebcalService;
+use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
 use OCP\Http\Client\IResponse;
@@ -34,6 +35,7 @@ class RefreshWebcalServiceTest extends TestCase {
 
 	/** @var LoggerInterface | MockObject */
 	private $logger;
+	private ITimeFactory|MockObject $time;
 
 	protected function setUp(): void {
 		parent::setUp();
@@ -42,6 +44,7 @@ class RefreshWebcalServiceTest extends TestCase {
 		$this->clientService = $this->createMock(IClientService::class);
 		$this->config = $this->createMock(IConfig::class);
 		$this->logger = $this->createMock(LoggerInterface::class);
+		$this->time = $this->createMock(ITimeFactory::class);
 	}
 
 	/**
@@ -54,7 +57,7 @@ class RefreshWebcalServiceTest extends TestCase {
 	public function testRun(string $body, string $contentType, string $result): void {
 		$refreshWebcalService = $this->getMockBuilder(RefreshWebcalService::class)
 			->onlyMethods(['getRandomCalendarObjectUri'])
-			->setConstructorArgs([$this->caldavBackend, $this->clientService, $this->config, $this->logger])
+			->setConstructorArgs([$this->caldavBackend, $this->clientService, $this->config, $this->logger, $this->time])
 			->getMock();
 
 		$refreshWebcalService
@@ -136,7 +139,7 @@ class RefreshWebcalServiceTest extends TestCase {
 		$response = $this->createMock(IResponse::class);
 		$refreshWebcalService = $this->getMockBuilder(RefreshWebcalService::class)
 			->onlyMethods(['getRandomCalendarObjectUri', 'getSubscription', 'queryWebcalFeed'])
-			->setConstructorArgs([$this->caldavBackend, $this->clientService, $this->config, $this->logger])
+			->setConstructorArgs([$this->caldavBackend, $this->clientService, $this->config, $this->logger, $this->time])
 			->getMock();
 
 		$refreshWebcalService
@@ -213,7 +216,7 @@ class RefreshWebcalServiceTest extends TestCase {
 		$response = $this->createMock(IResponse::class);
 		$refreshWebcalService = $this->getMockBuilder(RefreshWebcalService::class)
 			->onlyMethods(['getRandomCalendarObjectUri', 'getSubscription', 'queryWebcalFeed'])
-			->setConstructorArgs([$this->caldavBackend, $this->clientService, $this->config, $this->logger])
+			->setConstructorArgs([$this->caldavBackend, $this->clientService, $this->config, $this->logger, $this->time])
 			->getMock();
 
 		$refreshWebcalService
@@ -309,7 +312,8 @@ class RefreshWebcalServiceTest extends TestCase {
 			$this->caldavBackend,
 			$this->clientService,
 			$this->config,
-			$this->logger
+			$this->logger,
+			$this->time,
 		);
 
 		$this->caldavBackend->expects($this->once())
@@ -372,7 +376,11 @@ class RefreshWebcalServiceTest extends TestCase {
 
 	public function testInvalidUrl(): void {
 		$refreshWebcalService = new RefreshWebcalService($this->caldavBackend,
-			$this->clientService, $this->config, $this->logger);
+			$this->clientService,
+			$this->config,
+			$this->logger,
+			$this->time
+		);
 
 		$this->caldavBackend->expects($this->once())
 			->method('getSubscriptionsForUser')
