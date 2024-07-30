@@ -2420,12 +2420,10 @@ class CalDavBackend extends AbstractBackend implements SyncSupport, Subscription
 			if ($initialSync) {
 				$qb = $this->db->getQueryBuilder();
 				$qb->select('uri')
-					->from('calendarchanges')
+					->from('calendarobjects')
 					->where($qb->expr()->eq('calendarid', $qb->createNamedParameter($calendarId)))
 					->andWhere($qb->expr()->eq('calendartype', $qb->createNamedParameter($calendarType)))
-					->groupBy('uri')
-					// forced (PARAM_INT) is needed for doctrine with Sqlite, for the value to be used as an integer without quotes
-					->having($qb->expr()->lt($qb->func()->max('operation'), $qb->createNamedParameter(3, $qb::PARAM_INT)));
+					->andWhere($qb->expr()->isNull('deleted_at'));
 			} else {
 				$qb = $this->db->getQueryBuilder();
 				$qb->select('uri', $qb->func()->max('operation'))
