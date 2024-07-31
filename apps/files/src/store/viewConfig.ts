@@ -44,9 +44,10 @@ export const useViewConfigStore = function(...args) {
 			 * @param value
 			 */
 			async update(view: ViewId, key: string, value: string | number | boolean) {
-				axios.put(generateUrl(`/apps/files/api/v1/views/${view}/${key}`), {
+				const params = new URLSearchParams({ view, key })
+				axios.put(generateUrl('/apps/files/api/v1/views'), {
 					value,
-				})
+				}, { params })
 
 				emit('files:viewconfig:updated', { view, key, value })
 			},
