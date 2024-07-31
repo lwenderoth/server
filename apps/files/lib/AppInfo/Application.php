@@ -42,7 +42,9 @@ use OCP\Files\Events\Node\BeforeNodeCopiedEvent;
 use OCP\Files\Events\Node\BeforeNodeDeletedEvent;
 use OCP\Files\Events\Node\BeforeNodeRenamedEvent;
 use OCP\Files\Events\Node\NodeCopiedEvent;
+use OCP\Files\IRootFolder;
 use OCP\IConfig;
+use OCP\IL10N;
 use OCP\IPreview;
 use OCP\IRequest;
 use OCP\ISearch;
@@ -55,6 +57,7 @@ use OCP\Settings\Events\DeclarativeSettingsSetValueEvent;
 use OCP\Share\IManager as IShareManager;
 use OCP\Util;
 use Psr\Container\ContainerInterface;
+use Psr\Log\LoggerInterface;
 
 class Application extends App implements IBootstrap {
 	public const APP_ID = 'files';
@@ -82,6 +85,9 @@ class Application extends App implements IBootstrap {
 				$server->getUserFolder(),
 				$c->get(UserConfig::class),
 				$c->get(ViewConfig::class),
+				$c->get(IL10N::class),
+				$c->get(IRootFolder::class),
+				$c->get(LoggerInterface::class),
 			);
 		});
 
